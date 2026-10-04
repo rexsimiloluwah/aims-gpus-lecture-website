@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GPUs and Model Acceleration with Ben</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F5F7FB; --surface:#FFFFFF; --surface-2:#EEF2F9; --ink:#1D2230; --muted:#566074; --line:#DCE2EC;
+  --blue:#2F6FDE; --blue-soft:#DCE8FB; --blue-ink:#1F4FA8;
+  --sage:#DDEFD6; --sage-ink:#2E6A21; --lav:#EAE3F7; --lav-ink:#57419C; --peach:#FDE8D2; --peach-ink:#8F4D0E;
+  --pink:#F9DCDC; --pink-ink:#A2302A; --yellow:#FFF3CC; --yellow-ink:#6E5200;
+  --eq-gold:#B98200; --eq-teal:#147F93; --eq-orange:#C85F1E; --eq-violet:#6A4FC2; --eq-green:#2E7D32; --eq-red:#B3261E;
+  --stage:#EAF1FD; --shadow:0 1px 2px rgba(30,40,70,.06),0 6px 18px rgba(30,40,70,.06);
+  --font:"IBM Plex Sans",-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r-lg:20px; --r-md:14px; --r-sm:10px;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F131B; --surface:#171D29; --surface-2:#1E2533; --ink:#E9EDF5; --muted:#A4ADC0; --line:#2B3446;
+    --blue:#6FA0FF; --blue-soft:#1C2A45; --blue-ink:#A9C6FF;
+    --sage:#1D3121; --sage-ink:#A3D99A; --lav:#272040; --lav-ink:#C7B8F5; --peach:#3A2816; --peach-ink:#F5C08C;
+    --pink:#3A1F1F; --pink-ink:#F4A6A1; --yellow:#352C10; --yellow-ink:#F2D677;
+    --eq-gold:#F0C04A; --eq-teal:#4FC6DA; --eq-orange:#F59A5C; --eq-violet:#B6A2FF; --eq-green:#8BD48F; --eq-red:#FF8A80;
+    --stage:#DCE7FA; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F131B; --surface:#171D29; --surface-2:#1E2533; --ink:#E9EDF5; --muted:#A4ADC0; --line:#2B3446;
+  --blue:#6FA0FF; --blue-soft:#1C2A45; --blue-ink:#A9C6FF;
+  --sage:#1D3121; --sage-ink:#A3D99A; --lav:#272040; --lav-ink:#C7B8F5; --peach:#3A2816; --peach-ink:#F5C08C;
+  --pink:#3A1F1F; --pink-ink:#F4A6A1; --yellow:#352C10; --yellow-ink:#F2D677;
+  --eq-gold:#F0C04A; --eq-teal:#4FC6DA; --eq-orange:#F59A5C; --eq-violet:#B6A2FF; --eq-green:#8BD48F; --eq-red:#FF8A80;
+  --stage:#DCE7FA; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.25);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 76px);-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:17px;line-height:1.6;}
+img{max-width:100%;display:block}
+a{color:var(--blue-ink)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px;border-radius:6px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding-top:env(safe-area-inset-top,0px)}
+.top-in{display:flex;align-items:center;gap:18px;max-width:1440px;margin:0 auto;padding:12px 22px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-weight:700;letter-spacing:-.01em;margin-right:auto}
+.brand img{width:34px;height:34px;object-fit:contain;background:var(--stage);border-radius:50%;padding:3px}
+.brand span small{display:block;font-weight:500;font-size:12px;color:var(--muted);letter-spacing:0}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{text-decoration:none;color:var(--muted);font-weight:600;font-size:15px;padding:7px 12px;border-radius:999px}
+.nav a[aria-current="page"],.nav a:hover{color:var(--ink);background:var(--surface-2)}
+.theme-btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;width:38px;height:38px;cursor:pointer;display:grid;place-items:center}
+.theme-btn svg{width:18px;height:18px}
+
+/* ---------- layout ---------- */
+.shell{display:grid;grid-template-columns:250px minmax(0,1fr) 210px;gap:30px;max-width:1440px;margin:0 auto;padding:26px 22px 80px}
+.path{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 100px);overflow:auto}
+.path h2{font-size:14px;color:var(--muted);font-weight:600;margin:4px 0 10px}
+.path ol{list-style:none;margin:0;padding:0;position:relative}
+.path li{position:relative}
+.path li:not(:last-child)::after{content:"";position:absolute;left:15px;top:40px;bottom:-8px;width:2px;background:var(--line);border-radius:2px}
+.path li.done:not(:last-child)::after{background:var(--sage-ink)}
+.path li a{position:relative;display:flex;gap:12px;align-items:flex-start;text-decoration:none;color:var(--ink);padding:8px 8px 8px 0;border-radius:12px}
+.path li a:hover .dot{border-color:var(--blue)}
+.dot{flex:none;width:32px;height:32px;border-radius:50%;border:2px solid var(--line);background:var(--surface);display:grid;place-items:center;font-weight:700;font-size:14px;color:var(--muted);z-index:1}
+.path li a[aria-current="page"] .dot{border-color:var(--blue);color:var(--blue-ink);background:var(--blue-soft)}
+.path li.done .dot{background:var(--sage);border-color:var(--sage-ink);color:var(--sage-ink)}
+.path .t{font-weight:600;font-size:15px;line-height:1.3}
+.path .t small{display:block;color:var(--muted);font-weight:400;font-size:13px}
+.progress{margin-top:18px;padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);font-size:14px;color:var(--muted)}
+.bar{height:8px;background:var(--surface-2);border-radius:99px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--blue);width:0;transition:width .4s}
+main{min-width:0}
+.view{display:none;max-width:860px}
+.view.on{display:block}
+.view.wide{max-width:none}
+
+/* ---------- typography ---------- */
+h1{font-size:clamp(32px,4.6vw,48px);line-height:1.08;letter-spacing:-.025em;margin:6px 0 14px;font-weight:700}
+h2{font-size:28px;line-height:1.2;letter-spacing:-.015em;margin:54px 0 12px;font-weight:700}
+h3{font-size:20px;line-height:1.3;margin:28px 0 8px;font-weight:700}
+p{margin:0 0 14px;max-width:70ch}
+.lede{font-size:19px;color:var(--muted);max-width:62ch}
+.kicker{font-size:15px;font-weight:600;color:var(--blue-ink);margin:0}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+ul.clean{padding-left:20px;margin:0 0 14px}
+ul.clean li{margin:4px 0}
+
+/* ---------- components ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:22px 24px;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.tile{border-radius:var(--r-md);padding:16px 18px;background:var(--surface-2)}
+.tile h4{margin:6px 0 4px;font-size:17px}
+.tile p{font-size:15px;margin:0;color:var(--muted)}
+.t-sage{background:var(--sage)} .t-sage h4{color:var(--sage-ink)}
+.t-lav{background:var(--lav)} .t-lav h4{color:var(--lav-ink)}
+.t-blue{background:var(--blue-soft)} .t-blue h4{color:var(--blue-ink)}
+.t-peach{background:var(--peach)} .t-peach h4{color:var(--peach-ink)}
+.t-pink{background:var(--pink)} .t-pink h4{color:var(--pink-ink)}
+.tile .ic{width:40px;height:40px;border-radius:50%;background:var(--surface);display:grid;place-items:center}
+.tile .ic svg{width:22px;height:22px}
+.take{margin:22px 0;padding:16px 20px;border-radius:var(--r-md);background:var(--yellow);color:var(--ink);font-weight:600;border:1px solid color-mix(in srgb,var(--yellow-ink) 25%,transparent)}
+.take::before{content:"Takeaway";display:block;font-size:13px;font-weight:600;color:var(--yellow-ink);margin-bottom:2px}
+.ben{display:grid;grid-template-columns:112px minmax(0,1fr);gap:18px;align-items:center;margin:26px 0}
+.ben .stage{width:112px;height:132px;border-radius:24px;background:var(--stage);display:grid;place-items:end center;overflow:hidden;padding-top:8px}
+.ben .stage img{height:124px;width:auto}
+.ben .say{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 18px;box-shadow:var(--shadow)}
+.ben .say::before{content:"";position:absolute;left:-9px;top:28px;width:16px;height:16px;background:var(--surface);border-left:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
+.ben .say p{margin:0}
+.ben .say b{color:var(--blue-ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:11px 20px;background:var(--blue);color:#fff;font-weight:600;cursor:pointer;text-decoration:none;font-size:16px}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn:hover{filter:brightness(1.05)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.pill{display:inline-block;font-size:13px;font-weight:600;padding:3px 10px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+figure{margin:0}
+.figcap{font-size:14px;color:var(--muted);margin-top:8px}
+
+/* ---------- equations ---------- */
+.eq{margin:22px 0;padding:22px 20px 16px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
+.eq math{font-size:1.55em;display:block;margin:0 auto 14px;overflow-x:auto;overflow-y:hidden;padding:4px 0}
+.eq .legend{display:flex;flex-wrap:wrap;gap:8px 10px;justify-content:center;font-size:14px}
+.eq .legend span{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:99px;background:var(--surface-2)}
+.eq .legend span i{width:10px;height:10px;border-radius:50%;flex:none}
+.eq .legend b{font-family:var(--mono);font-weight:600}
+.cg{color:var(--eq-gold)} .ct{color:var(--eq-teal)} .co{color:var(--eq-orange)} .cv{color:var(--eq-violet)} .cgr{color:var(--eq-green)} .cr{color:var(--eq-red)} .cb{color:var(--blue)}
+.bg-g{background:var(--eq-gold)} .bg-t{background:var(--eq-teal)} .bg-o{background:var(--eq-orange)} .bg-v{background:var(--eq-violet)} .bg-gr{background:var(--eq-green)} .bg-r{background:var(--eq-red)} .bg-b{background:var(--blue)}
+
+/* ---------- widgets ---------- */
+.widget{margin:22px 0;border-radius:var(--r-lg);border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+.widget-h{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.widget-h h3{margin:0;font-size:17px}
+.widget-h .tag{margin-left:auto;font-size:13px;color:var(--muted);font-weight:600}
+.widget-b{padding:18px 20px 20px}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px 18px;margin-bottom:16px}
+.ctl label{display:block;font-size:14px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.ctl output{font-family:var(--mono);color:var(--ink);font-weight:600;float:right}
+input[type=range]{width:100%;accent-color:var(--blue)}
+select,input[type=number],input[type=text]{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:99px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:6px 13px;border-radius:99px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.readout div{background:var(--surface-2);border-radius:12px;padding:12px 14px}
+.readout small{display:block;font-size:13px;color:var(--muted);font-weight:600}
+.readout strong{font-family:var(--mono);font-size:21px;font-weight:600}
+.verdict{margin-top:14px;padding:12px 16px;border-radius:12px;font-weight:600}
+.verdict.ok{background:var(--sage);color:var(--sage-ink)}
+.verdict.bad{background:var(--pink);color:var(--pink-ink)}
+.verdict.mid{background:var(--yellow);color:var(--yellow-ink)}
+.stack{display:flex;height:42px;border-radius:12px;overflow:hidden;background:var(--surface-2);position:relative}
+.stack span{display:grid;place-items:center;font-size:12px;font-weight:600;color:#1D2230;white-space:nowrap;overflow:hidden;transition:width .35s}
+.limit{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--eq-red);border-radius:2px}
+.limit::after{content:attr(data-l);position:absolute;top:-22px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;color:var(--eq-red);white-space:nowrap}
+.hint{font-size:14px;color:var(--muted);margin-top:10px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:34px;align-items:center;margin-bottom:34px}
+.die-wrap{position:relative;border-radius:28px;background:linear-gradient(160deg,#16213A,#0E1526);padding:22px;box-shadow:var(--shadow);aspect-ratio:5/4}
+.die-wrap canvas{width:100%;height:100%;display:block;border-radius:16px}
+.die-wrap .ben-hero{position:absolute;right:-6px;bottom:-14px;height:62%;filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+.die-wrap .die-label{position:absolute;left:22px;top:18px;color:#B9CBF0;font-size:13px;font-weight:600}
+.journey{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:10px}
+.journey a{display:block;text-decoration:none;color:var(--ink);padding:18px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);position:relative}
+.journey a:hover{border-color:var(--blue)}
+.journey .n{font-family:var(--mono);font-weight:600;color:var(--blue-ink);font-size:14px}
+.journey h4{margin:4px 0 6px;font-size:17px}
+.journey p{font-size:14px;color:var(--muted);margin:0}
+.journey a.done::after{content:"Done";position:absolute;right:14px;top:14px;font-size:12px;font-weight:700;color:var(--sage-ink);background:var(--sage);padding:2px 9px;border-radius:99px}
+
+/* module head + footer */
+.mod-foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:56px;padding-top:22px;border-top:1px solid var(--line)}
+.slide-link{display:inline-flex;gap:8px;align-items:center;font-size:14px;font-weight:600;color:var(--muted);text-decoration:none;border:1px solid var(--line);padding:6px 12px;border-radius:99px;background:var(--surface)}
+.slide-link:hover{color:var(--ink)}
+
+/* diagrams */
+.flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;margin:12px 0}
+.flow .node{padding:12px 16px;border-radius:14px;font-weight:600;text-align:center;min-width:110px}
+.flow .arr{color:var(--muted);font-size:22px}
+.mem-diagram{display:grid;grid-template-columns:minmax(0,1.3fr) auto minmax(0,1fr);gap:14px;align-items:center}
+.chip{border:2px dashed var(--line);border-radius:20px;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center}
+.chip .lab{grid-column:1/-1;font-size:13px;font-weight:600;color:var(--muted)}
+
+/* attention grid */
+.attn-grid{display:grid;gap:2px;aspect-ratio:1;width:min(320px,100%);margin:auto}
+.attn-grid i{background:var(--blue-soft);border-radius:2px;transition:background .2s}
+.attn-grid i.hot{background:var(--eq-teal)}
+.attn-grid i.done{background:color-mix(in srgb,var(--eq-teal) 35%,var(--blue-soft))}
+.attn-grid i.mask{background:var(--surface-2)}
+.counter{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+
+/* pipeline gantt */
+.gantt{display:grid;gap:3px;font-size:11px;font-family:var(--mono);overflow-x:auto}
+.gantt .c{height:30px;border-radius:5px;display:grid;place-items:center;font-weight:600;min-width:22px}
+.gantt .f{background:var(--blue-soft);color:var(--blue-ink)}
+.gantt .b{background:var(--sage);color:var(--sage-ink)}
+.gantt .e{background:repeating-linear-gradient(45deg,var(--surface-2),var(--surface-2) 4px,transparent 4px,transparent 8px);border:1px dashed var(--line)}
+.gantt .lbl{font-family:var(--font);font-size:13px;font-weight:600;color:var(--muted);display:flex;align-items:center;padding-right:6px;white-space:nowrap}
+
+/* ring */
+.ring svg{width:100%;max-width:360px;display:block;margin:auto}
+
+/* tp */
+.mat{display:inline-grid;gap:3px;vertical-align:middle}
+.mat i{width:20px;height:20px;border-radius:4px;display:block}
+
+/* quiz */
+.q-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.q-text{font-size:21px;font-weight:700;line-height:1.35;margin:6px 0 16px}
+.opts{display:grid;gap:10px}
+.opt{display:flex;align-items:center;gap:14px;text-align:left;padding:10px 18px 10px 10px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;font-size:16px;line-height:1.35}
+.opt:hover{border-color:var(--blue)}
+.opt .L{flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-weight:700}
+.opt.right{border:2px solid #4E9A3A;background:var(--sage);font-weight:600}
+.opt.right .L{background:#2E6A21;color:#fff}
+.opt.wrong{border:2px solid var(--eq-red);background:var(--pink)}
+.opt.fade{opacity:.55}
+.explain{margin-top:16px;padding:14px 18px;border-radius:14px;background:var(--yellow)}
+.explain b{display:block;margin-bottom:2px}
+.score-dots{display:flex;gap:5px;flex-wrap:wrap}
+.score-dots i{width:12px;height:12px;border-radius:50%;background:var(--surface-2);border:1px solid var(--line)}
+.score-dots i.r{background:#4E9A3A;border-color:#4E9A3A}
+.score-dots i.w{background:var(--eq-red);border-color:var(--eq-red)}
+.score-dots i.cur{outline:2px solid var(--blue);outline-offset:1px}
+
+/* worksheet */
+.ws-q{margin:22px 0}
+.ws-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;align-items:end}
+.ws-row label{font-size:13px;font-weight:600;color:var(--muted)}
+.ws-in{position:relative}
+.ws-in input.ok{border-color:#4E9A3A;background:var(--sage)}
+.ws-in input.no{border-color:var(--eq-red);background:var(--pink)}
+.reflect{margin-top:14px;padding:12px 16px;border-radius:12px;background:var(--lav)}
+.reflect b{color:var(--lav-ink)}
+table.data{width:100%;border-collapse:collapse;font-size:15px}
+table.data th,table.data td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left}
+table.data th{font-size:13px;color:var(--muted);font-weight:600}
+.tbl-wrap{overflow-x:auto}
+
+/* slides viewer */
+.viewer{display:grid;gap:14px}
+.viewer .screen{position:relative;background:#0E1526;border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+.viewer .screen img{width:100%;border-radius:8px;aspect-ratio:16/9;object-fit:contain;background:#fff}
+.thumbs{display:grid;grid-auto-flow:column;grid-auto-columns:150px;gap:10px;overflow-x:auto;padding-bottom:8px}
+.thumbs button{border:2px solid transparent;border-radius:10px;padding:0;background:none;cursor:pointer;text-align:left}
+.thumbs button img{border-radius:8px;width:100%;aspect-ratio:16/9;object-fit:cover;background:#fff}
+.thumbs button[aria-current="true"]{border-color:var(--blue)}
+.thumbs button span{display:block;font-size:12px;color:var(--muted);padding:3px 2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* resources */
+.res{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.res a{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px;padding:16px 18px;border-radius:var(--r-md);border:1px solid var(--line);background:var(--surface);text-decoration:none;color:var(--ink)}
+.res a:hover{border-color:var(--blue)}
+.res .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center}
+.res .ic svg{width:22px;height:22px}
+.res h4{margin:0 0 2px;font-size:16px}
+.res p{margin:0;font-size:14px;color:var(--muted)}
+.res .url{font-size:13px;color:var(--blue-ink);word-break:break-all}
+.papers li{margin:8px 0}
+
+.foot{border-top:1px solid var(--line);padding:26px 22px calc(26px + env(safe-area-inset-bottom,0px));text-align:center;color:var(--muted);font-size:15px}
+.foot b{color:var(--ink)}
+.feature{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:center;padding:24px 26px;border-radius:var(--r-lg);background:var(--blue-soft);border:1.5px solid var(--blue);text-decoration:none;color:var(--ink);margin-top:22px}
+.feature:hover{filter:brightness(1.02)}
+.feature .tagline{font-size:14px;font-weight:600;color:var(--blue-ink);margin:0 0 4px}
+.feature h3{margin:0 0 6px;font-size:22px}
+.feature p{margin:0;color:var(--muted)}
+.feature .url{font-size:13px;color:var(--blue-ink);margin-top:8px;display:block;word-break:break-all}
+@media (max-width:720px){.feature{grid-template-columns:minmax(0,1fr)}}
+.hier{display:grid;gap:10px}
+.hier .lvl{border-radius:16px;padding:14px 16px;border:1.5px solid var(--line)}
+.hier .lvl>b{display:block;margin-bottom:8px}
+.hier .inner{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.ladder{display:grid;gap:8px}
+.ladder div{display:grid;grid-template-columns:150px minmax(0,1fr) 150px;gap:12px;align-items:center;padding:10px 14px;border-radius:12px}
+.ladder b{font-size:15px}.ladder span{font-size:14px;color:var(--muted)}.ladder em{font-style:normal;font-family:var(--mono);font-size:13px;text-align:right}
+@media (max-width:720px){.ladder div{grid-template-columns:1fr}.ladder em{text-align:left}}
+.mm{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+.mm-m{display:grid;grid-template-columns:repeat(3,46px);gap:5px;padding:8px;border-left:2px solid var(--muted);border-right:2px solid var(--muted);border-radius:8px}
+.mm-m i{height:46px;border-radius:9px;display:grid;place-items:center;font-style:normal;font-family:var(--mono);font-weight:600;font-size:17px;background:var(--surface-2);transition:background .25s,color .25s,transform .25s}
+#mmA i.on{background:var(--eq-gold);color:#fff}
+#mmB i.on{background:var(--eq-teal);color:#fff}
+#mmC i{color:transparent}
+#mmC i.on{background:var(--eq-green);color:#fff;transform:scale(1.06)}
+#mmC i.done{background:var(--sage);color:var(--sage-ink)}
+.mm-op{font-size:28px;font-weight:700;color:var(--muted)}
+.mm-calc{text-align:center;min-height:1.6em;margin:14px auto 0;font-size:15px}
+@media (max-width:720px){.mm-m{grid-template-columns:repeat(3,34px)}.mm-m i{height:34px;font-size:14px}}
+.toc-rail{position:sticky;top:84px;align-self:start;max-height:calc(100vh - 100px);overflow:auto;padding-left:16px;border-left:1px solid var(--line)}
+.toc-rail[hidden]{display:none}
+.toc-rail .tr-h{display:flex;align-items:center;gap:8px;margin:4px 0 10px}
+.toc-rail .tr-h b{font-size:14px;color:var(--muted);font-weight:600}
+.toc-rail .tr-h button{margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-size:12px;font-weight:600;color:var(--muted);padding:3px 9px;cursor:pointer}
+.toc-list{list-style:none;margin:0;padding:0}
+.toc-list li{margin:0}
+.toc-list button{all:unset;cursor:pointer;display:block;padding:5px 10px;margin-left:-11px;border-left:2px solid transparent;font-size:14px;line-height:1.35;color:var(--muted)}
+.toc-list li.h3 button{padding-left:24px;font-size:13px}
+.toc-list button:hover{color:var(--ink)}
+.toc-list button.active{color:var(--blue-ink);border-left-color:var(--blue);font-weight:600}
+.toc-rail.closed .toc-list{display:none}
+.toc-bar{display:none;position:sticky;top:calc(env(safe-area-inset-top,0px) + 62px);z-index:20;margin:-10px 0 18px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+.toc-bar summary{list-style:none;cursor:pointer;display:flex;gap:8px;align-items:center;padding:10px 14px;font-size:14px;font-weight:600}
+.toc-bar summary::-webkit-details-marker{display:none}
+.toc-bar summary span{color:var(--muted);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toc-bar summary svg{width:16px;height:16px;margin-left:auto;flex:none;transition:transform .2s}
+.toc-bar[open] summary svg{transform:rotate(180deg)}
+.toc-bar .toc-list{padding:0 14px 12px 14px;max-height:55vh;overflow:auto}
+.toc-bar .toc-list button{margin-left:0}
+@media (max-width:1240px){.shell{grid-template-columns:250px minmax(0,1fr)}.toc-rail{display:none!important}.toc-bar.has{display:block}}
+@media (max-width:980px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:18px}
+  .path{position:static;max-height:none}
+  .path ol{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+  .path ol{gap:22px}
+  .path li:not(:last-child)::after{left:calc(50% + 16px);right:-66px;top:23px;bottom:auto;width:auto;height:2px}
+  .path li a{flex-direction:column;align-items:center;text-align:center;width:120px;padding:8px}
+  .path .t small{display:none}
+  .progress{display:none}
+  .hero{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:720px){
+  body{font-size:16px}
+  .grid2,.grid3,.grid4,.res,.journey{grid-template-columns:minmax(0,1fr)}
+  .top-in{flex-wrap:wrap;gap:8px}
+  .nav{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap}
+  .ben{grid-template-columns:76px minmax(0,1fr)}
+  .ben .stage{width:76px;height:92px}.ben .stage img{height:86px}
+  .mem-diagram{grid-template-columns:minmax(0,1fr)}
+  .eq math{font-size:1.25em}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href="#home"><img src="assets/img/ben_think.webp" alt=""><span>GPUs and Model Acceleration<small>An interactive journey with Ben</small></span></a>
+    <nav class="nav" aria-label="Main">
+      <a href="#home" data-nav="home">Home</a>
+      <a href="#m1" data-nav="learn">Learn</a>
+      <a href="#slides" data-nav="slides">Slides</a>
+      <a href="#quiz" data-nav="quiz">Quiz</a>
+      <a href="#worksheet" data-nav="worksheet">Worksheet</a>
+      <a href="#resources" data-nav="resources">Resources</a>
+    </nav>
+    <button class="theme-btn" id="themeBtn" aria-label="Switch light or dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg></button>
+  </div>
+</header>
+
+<div class="shell">
+<aside class="path" aria-label="Learning path">
+  <h2>Your learning path</h2>
+  <ol id="pathList">
+    <li data-m="m1"><a href="#m1"><span class="dot">1</span><span class="t">Why GPUs?<small>Parallel work at scale</small></span></a></li>
+    <li data-m="m2"><a href="#m2"><span class="dot">2</span><span class="t">Measuring Compute and Memory<small>FLOPs, bytes and cost</small></span></a></li>
+    <li data-m="m3"><a href="#m3"><span class="dot">3</span><span class="t">GPU Bottlenecks<small>What slows a GPU down</small></span></a></li>
+    <li data-m="m4"><a href="#m4"><span class="dot">4</span><span class="t">Single-GPU Memory Optimization Tricks<small>Pack the bag smarter</small></span></a></li>
+    <li data-m="m5"><a href="#m5"><span class="dot">5</span><span class="t">Multi-GPU Training<small>Share the load</small></span></a></li>
+    <li data-m="m6"><a href="#m6"><span class="dot">6</span><span class="t">Inference Engineering<small>Serving real users</small></span></a></li>
+  </ol>
+  <div class="progress"><span id="progText">0 of 6 modules done</span><div class="bar"><i id="progBar"></i></div></div>
+</aside>
+
+<main id="main">
+<details class="toc-bar" id="tocBar"><summary>On this page <span id="tocBarCur"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary><ol class="toc-list" id="tocBarList"></ol></details>
+
+<!-- ================= HOME ================= -->
+<section class="view" data-view="home" aria-labelledby="h-home">
+  <div class="hero">
+    <div>
+      <p class="kicker">AI Research Foundations</p>
+      <h1 id="h-home">Make AI models fit, run fast and cost less</h1>
+      <p class="lede">A hands-on guide to GPUs: how to measure compute and memory, find the bottleneck, and use the tricks real teams use to train and serve models.</p>
+      <div class="row" style="margin-top:18px">
+        <a class="btn" href="#m1">Start with Module 1</a>
+        <a class="btn ghost" href="#quiz">Test yourself first</a>
+      </div>
+    </div>
+    <div class="die-wrap" role="img" aria-label="An animated GPU chip with thousands of cores lighting up in parallel, with Ben watching">
+      <span class="die-label">Thousands of cores, working at once</span>
+      <canvas id="die" width="600" height="480"></canvas>
+      <img class="ben-hero" src="assets/img/ben_think.webp" alt="">
+    </div>
+  </div>
+
+  <div class="ben"><div class="stage"><img src="assets/img/ben_stand.webp" alt="Ben, the learner"></div>
+    <div class="say"><p>Hi, I'm <b>Ben</b>. I've heard "you need GPUs for AI" a hundred times, but I couldn't tell you why, how much memory a model needs, or why my training run crashed. Let's figure it out together, one idea at a time.</p></div></div>
+
+  <h2>Your journey</h2>
+  <div class="journey" id="journey">
+    <a href="#m1" data-m="m1"><span class="n">Module 1</span><h4>Why GPUs?</h4><p>CPUs vs GPUs, and why AI is a parallel problem.</p></a>
+    <a href="#m2" data-m="m2"><span class="n">Module 2</span><h4>Measuring Compute and Memory</h4><p>Estimate FLOPs, training time, cost and GPU memory.</p></a>
+    <a href="#m3" data-m="m3"><span class="n">Module 3</span><h4>GPU Bottlenecks</h4><p>Find what limits a GPU, then see how FlashAttention moves less data.</p></a>
+    <a href="#m4" data-m="m4"><span class="n">Module 4</span><h4>Single-GPU Memory Optimization Tricks</h4><p>Quantization, mixed precision and gradient accumulation.</p></a>
+    <a href="#m5" data-m="m5"><span class="n">Module 5</span><h4>Multi-GPU Training</h4><p>Data, tensor and pipeline parallelism, plus ZeRO.</p></a>
+    <a href="#m6" data-m="m6"><span class="n">Module 6</span><h4>Inference Engineering</h4><p>Prefill, decode, KV cache, batching and speculative decoding.</p></a>
+  </div>
+
+  <h2>Practise and go further</h2>
+  <div class="grid3">
+    <a class="tile t-blue" href="#quiz" style="text-decoration:none;color:inherit"><h4>Quiz</h4><p>12 questions with instant feedback and explanations.</p></a>
+    <a class="tile t-sage" href="#worksheet" style="text-decoration:none;color:inherit"><h4>Choose Your GPU</h4><p>The group worksheet, with answer checks and a plan builder.</p></a>
+    <a class="tile t-lav" href="#slides" style="text-decoration:none;color:inherit"><h4>Lecture slides</h4><p>Browse all 78 slides or download the deck.</p></a>
+  </div>
+</section>
+
+<!-- ================= M1 ================= -->
+<section class="view" data-view="m1" aria-labelledby="h-m1">
+  <p class="kicker">Module 1 of 6</p>
+  <h1 id="h-m1">Why GPUs power modern AI</h1>
+  <p class="lede">Every model you use, from chatbots to image generators, runs on GPUs. The reason is simple once you see the shape of the work.</p>
+
+  <div class="widget">
+    <div class="widget-h"><h3>Who would you hire?</h3><span class="tag">Try it</span></div>
+    <div class="widget-b">
+      <p>You need to solve <b>1,000,000</b> simple sums like 2 × 8 + 5. A world-class mathematician takes 1 second per sum. A high-school student takes 3 seconds.</p>
+      <div class="grid2">
+        <button class="opt" data-hire="a"><span class="L">A</span>4 world-class mathematicians</button>
+        <button class="opt" data-hire="b"><span class="L">B</span>1,000 high-school students</button>
+      </div>
+      <div id="hireOut" class="explain" hidden></div>
+    </div>
+  </div>
+
+  <h2>CPU vs GPU</h2>
+  <div class="grid2">
+    <div class="tile t-lav"><h4>CPU: a few brilliant experts</h4><p>A handful of powerful cores, each built to finish one complicated, step-by-step task as quickly as possible. Perfect for your operating system, browser, database and Python code.</p></div>
+    <div class="tile t-blue"><h4>GPU: an army of workers</h4><p>Thousands of simpler cores built to do the same simple maths on lots of data at the same time. First built to colour millions of pixels at once, now the engine of AI.</p></div>
+  </div>
+  <div class="tbl-wrap" style="margin-top:16px"><table class="data"><thead><tr><th></th><th>CPU</th><th>GPU</th></tr></thead><tbody>
+    <tr><td><b>Cores</b></td><td>About 4 to 128 powerful cores</td><td>Thousands of simple cores (an H100 has 16,896 CUDA cores)</td></tr>
+    <tr><td><b>Built for</b></td><td>Low latency: finish each task fast</td><td>High throughput: finish lots of tasks together</td></tr>
+    <tr><td><b>Great at</b></td><td>Branching logic, tasks that depend on the previous step</td><td>The same operation on huge arrays of numbers</td></tr>
+    <tr><td><b>In AI</b></td><td>Loads data, runs the training loop, coordinates</td><td>Does the heavy maths: matrix multiplications</td></tr>
+  </tbody></table></div>
+  <p style="margin-top:16px">They work as a team. The CPU is the manager that prepares data and tells the GPU what to do. The GPU is the factory floor that does the maths.</p>
+
+  <h2>Why GPUs Matter in Modern AI: Matrix Multiplication</h2>
+  <p>Inside a neural network, almost everything is a <b>tensor</b>: a grid of numbers with one, two or more dimensions. Inputs, weights, activations and embeddings are all tensors, and a model's layers mostly multiply tensors together.</p>
+  <figure class="eq" aria-label="Each output y i is the sum over j of W i j times x j">
+    <math display="block"><mrow><msub><mi class="cgr">y</mi><mi>i</mi></msub><mo>=</mo><munder><mo>∑</mo><mi>j</mi></munder><msub><mi class="cg">W</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>×</mo><msub><mi class="ct">x</mi><mi>j</mi></msub></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>W</b> weights</span><span><i class="bg-t"></i><b>x</b> inputs</span><span><i class="bg-gr"></i><b>y</b> outputs: each one is independent of the others</span></figcaption>
+  </figure>
+  <div class="widget" id="w-mm">
+    <div class="widget-h"><h3>Watch two matrices multiply</h3><span class="tag">Animation</span></div>
+    <div class="widget-b">
+      <div class="row" style="margin-bottom:14px"><div class="seg" id="mmMode"><button aria-pressed="true" data-v="cpu">One at a time (CPU)</button><button aria-pressed="false" data-v="gpu">All at once (GPU)</button></div></div>
+      <div class="mm" aria-hidden="true"><div class="mm-m" id="mmA"></div><span class="mm-op">×</span><div class="mm-m" id="mmB"></div><span class="mm-op">=</span><div class="mm-m" id="mmC"></div></div>
+      <p class="mm-calc mono" id="mmCalc" aria-live="polite"></p>
+      <p class="hint">Each output cell is a row of A times a column of B. No cell needs another cell's answer, so a GPU can compute all of them at the same time.</p>
+    </div>
+  </div>
+  <p>Multiplying a 4,096 × 4,096 weight matrix by one input vector takes about 16.8 million multiply-and-adds, and none of the outputs depends on another. A CPU works through them a few at a time. A GPU hands them out to thousands of cores at once.</p>
+
+  <h2>Inside an NVIDIA GPU</h2>
+  <p>A GPU is organised in layers, like a company with departments and teams.</p>
+  <div class="hier">
+    <div class="lvl" style="background:var(--surface)"><b>The GPU</b>
+      <div class="inner">
+        <div class="tile t-blue"><h4>Streaming Multiprocessors (SMs)</h4><p>The departments. An H100 has 132 of them, each running many calculations at once.</p></div>
+        <div class="tile t-sage"><h4>CUDA cores</h4><p>Inside each SM: general-purpose units that multiply and add.</p></div>
+        <div class="tile t-lav"><h4>Tensor Cores</h4><p>Specialists for matrix multiplication, built for low precision like BF16 and FP8. They do most of the work in AI.</p></div>
+        <div class="tile t-peach"><h4>HBM (VRAM)</h4><p>High Bandwidth Memory stacked next to the chip. Holds the model and its data.</p></div>
+      </div>
+    </div>
+  </div>
+  <h3>How work is split up</h3>
+  <div class="flow"><div class="node" style="background:var(--surface-2)">PyTorch operation</div><span class="arr">→</span><div class="node" style="background:var(--blue-soft);color:var(--blue-ink)">CUDA kernel<br><small>a function that runs on the GPU</small></div><span class="arr">→</span><div class="node" style="background:var(--sage);color:var(--sage-ink)">Thousands of threads<br><small>tiny units of work</small></div><span class="arr">→</span><div class="node" style="background:var(--lav);color:var(--lav-ink)">Warps of 32 threads<br><small>run each instruction together</small></div></div>
+  <p class="hint">You rarely write kernels yourself: PyTorch and NVIDIA's libraries launch them for you. But this picture explains why GPUs love big, regular blocks of work.</p>
+
+  <h3>The memory ladder</h3>
+  <p>Not all GPU memory is equal. The closer memory sits to the cores, the faster and smaller it is.</p>
+  <div class="ladder">
+    <div class="t-sage"><b>Registers</b><span>Inside each core; holds the numbers being worked on right now</span><em>fastest, tiniest</em></div>
+    <div class="t-lav"><b>L1 / shared memory (SRAM)</b><span>Inside each SM; FlashAttention keeps its tiles here</span><em>very fast, KBs per SM</em></div>
+    <div class="t-blue"><b>L2 cache</b><span>Shared across the whole chip</span><em>fast, tens of MB</em></div>
+    <div class="t-peach"><b>HBM (VRAM)</b><span>Where the model and its data live</span><em>slowest, 16 to 192 GB</em></div>
+  </div>
+  <p style="margin-top:14px"><b>Capacity</b> is how many boxes the warehouse holds. <b>Bandwidth</b> is how fast boxes move in and out. AI needs both, and running out of the first is the famous <span class="mono">CUDA out of memory</span> error.</p>
+
+  <h3>Connecting GPUs</h3>
+  <div class="grid2">
+    <div class="tile t-blue"><h4>PCIe</h4><p>The standard road between devices in a computer. Fine for one GPU; slow for GPUs that constantly swap data.</p></div>
+    <div class="tile t-sage"><h4>NVLink and NVSwitch</h4><p>NVIDIA's high-speed highways between GPUs, around 900 GB/s on an H100. Essential for multi-GPU training (Module 5).</p></div>
+  </div>
+
+  <h2>Meet some real GPUs</h2>
+  <p>You will see these names in papers, cloud consoles and job adverts. The numbers are approximate and vary by version.</p>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>GPU</th><th>Generation</th><th>Memory</th><th>Bandwidth</th><th>Known for</th></tr></thead><tbody>
+    <tr><td><b>T4</b></td><td>Turing (2018)</td><td>16 GB</td><td>~320 GB/s</td><td>The free GPU in Google Colab; great for learning and small inference</td></tr>
+    <tr><td><b>RTX 4090</b></td><td>Ada Lovelace (2022)</td><td>24 GB</td><td>~1 TB/s</td><td>A consumer gaming card that many researchers use on a desk</td></tr>
+    <tr><td><b>V100</b></td><td>Volta (2017)</td><td>16 or 32 GB</td><td>~900 GB/s</td><td>The first GPU with Tensor Cores</td></tr>
+    <tr><td><b>A100</b></td><td>Ampere (2020)</td><td>40 or 80 GB</td><td>1.6 to 2 TB/s</td><td>The workhorse of large-scale AI for years; 312 TFLOPS in BF16</td></tr>
+    <tr><td><b>H100</b></td><td>Hopper (2022)</td><td>80 GB</td><td>~3.35 TB/s</td><td>Built for transformers: FP8 and the Transformer Engine; about 990 TFLOPS in BF16</td></tr>
+    <tr><td><b>H200</b></td><td>Hopper (2024)</td><td>141 GB</td><td>~4.8 TB/s</td><td>An H100 with much more and faster memory, ideal for big models</td></tr>
+    <tr><td><b>B200</b></td><td>Blackwell (2024)</td><td>192 GB</td><td>~8 TB/s</td><td>The newest generation: more compute, memory and FP4 support</td></tr>
+  </tbody></table></div>
+  <p style="margin-top:14px">NVIDIA isn't the only option. <b>AMD</b> makes data-centre GPUs like the MI300X (192 GB of HBM), and <b>Google's TPUs</b> are AI accelerators built around the same idea: lots of parallel matrix maths fed by fast memory. Each generation moves in the same direction: more compute, more memory, more bandwidth, faster links and lower precision.</p>
+
+  <h2>The GPU system in one picture</h2>
+  <div class="grid3">
+    <div class="tile t-sage"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></div><h4>Compute cores</h4><p>The workers. They do the calculations in parallel.</p></div>
+    <div class="tile t-blue"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div><h4>VRAM (HBM)</h4><p>The warehouse. On AI GPUs this is HBM, the High Bandwidth Memory stacked next to the chip. It holds parameters, activations and everything else the model needs.</p></div>
+    <div class="tile t-peach"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></div><h4>Memory bandwidth</h4><p>The conveyor belt. Moves data between memory and the cores.</p></div>
+  </div>
+  <div class="take">A GPU is only as fast as its slowest part. Cores, memory and the conveyor belt all have to keep up.</div>
+
+  <div class="ben"><div class="stage"><img src="assets/img/ben_idea.webp" alt="Ben with an idea"></div>
+    <div class="say"><p>So a GPU isn't "faster" at everything. It's faster at <b>lots of simple maths at once</b>, which is what AI needs. Next question: how much maths, and how much memory?</p></div></div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="12">See slides 12 to 21</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#home">Back to home</a><button class="btn" data-complete="m1" data-next="#m2">Mark done and continue</button></div>
+</section>
+
+<!-- ================= M2 ================= -->
+<section class="view" data-view="m2" aria-labelledby="h-m2">
+  <p class="kicker">Module 2 of 6</p>
+  <h1 id="h-m2">Measuring compute and memory</h1>
+  <p class="lede">Before you train or run a model, two questions decide which GPU you need: how much compute does it take, and how much memory does it need?</p>
+
+  <h2>Why bigger AI keeps getting better</h2>
+  <div class="grid2" style="align-items:center">
+    <div>
+      <p>Kaplan et al. (2020) found that as we scale <b>model size</b>, <b>data</b> and <b>compute</b>, a language model's loss falls in a smooth, predictable way, across more than seven orders of magnitude.</p>
+      <p>That predictability is why labs keep building bigger models. It also means every step up needs more GPUs, more memory and more money.</p>
+    </div>
+    <figure class="card" style="padding:12px"><img src="assets/img/kaplan.webp" alt="First page of the paper Scaling Laws for Neural Language Models by Kaplan and colleagues, 2020" loading="lazy" style="border-radius:8px;border:1px solid var(--line)"><figcaption class="figcap">Kaplan et al., 2020, Scaling Laws for Neural Language Models</figcaption></figure>
+  </div>
+  <div class="take">As AI scales, the cost of intelligence scales with it.</div>
+
+  <h2>Why measure compute and memory?</h2>
+  <p>Before you train or run a model, you need answers to two questions. They decide which GPU you rent, how many you need, how long you wait and how much you pay.</p>
+  <div class="grid2">
+    <div class="tile t-blue"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></div><h4>How much compute does my model need?</h4><p>Tells you how long training takes and what it costs. Get it wrong and a "one-week" run takes three months.</p></div>
+    <div class="tile t-lav"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div><h4>How much memory does my model need?</h4><p>Tells you whether the model fits on the GPU at all. Get it wrong and you hit <span class="mono">CUDA out of memory</span> before training even starts.</p></div>
+  </div>
+
+  <h2>Measuring Compute</h2>
+  <p>Compute is the actual mathematical work a model does. We measure it by counting operations.</p>
+  <h3>FLOPs and FLOPS</h3>
+  <p>A <b>FLOP</b> is one floating-point operation, like one multiply or one add. Multiplying an m × k matrix by a k × n matrix takes about <span class="mono">2 × m × k × n</span> FLOPs (one multiply and one add for each term).</p>
+  <div class="grid2">
+    <div class="tile t-blue"><h4>FLOPs (lowercase s)</h4><p>A <b>count</b>: how much work a job needs.</p></div>
+    <div class="tile t-sage"><h4>FLOPS (capital S)</h4><p>A <b>speed</b>: how much work a GPU does per second.</p></div>
+  </div>
+  <h3>Estimating training compute</h3>
+  <p>For a standard transformer, training compute has a famous shortcut:</p>
+  <figure class="eq" aria-label="Training FLOPs is approximately 6 times N times D">
+    <math display="block"><mrow><mtext>Training FLOPs</mtext><mo>≈</mo><mn class="cv">6</mn><mo>×</mo><mi class="cg">N</mi><mo>×</mo><mi class="ct">D</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>6</b> 2 FLOPs forward + 4 backward, per parameter per token</span><span><i class="bg-g"></i><b>N</b> parameters</span><span><i class="bg-t"></i><b>D</b> training tokens</span></figcaption>
+  </figure>
+  <figure class="eq" aria-label="Training time equals FLOPs divided by GPU FLOPS times utilization times number of GPUs">
+    <math display="block"><mrow><mtext>Time</mtext><mo>=</mo><mfrac><mtext>FLOPs</mtext><mrow><mtext class="co">FLOPS</mtext><mo>×</mo><mi class="cgr">u</mi><mo>×</mo><mi class="cb">G</mi></mrow></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-o"></i><b>FLOPS</b> GPU peak speed</span><span><i class="bg-gr"></i><b>u</b> utilization, often 30 to 50%</span><span><i class="bg-b"></i><b>G</b> number of GPUs</span></figcaption>
+  </figure>
+  <div class="widget" id="w-train">
+    <div class="widget-h"><h3>Training cost calculator</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl">
+        <div><label for="tN">Parameters (N) <output id="tNo"></output></label><input type="range" id="tN" min="0" max="100" value="40"></div>
+        <div><label for="tD">Training tokens (D) <output id="tDo"></output></label><input type="range" id="tD" min="0" max="100" value="45"></div>
+        <div><label for="tG">GPU</label><select id="tG"><option value="65|0.35">NVIDIA T4 (65 TFLOPS, $0.35/h)</option><option value="312|2.5" >NVIDIA A100 (312 TFLOPS, $2.50/h)</option><option value="989|4" selected>NVIDIA H100 (989 TFLOPS, $4/h)</option></select></div>
+        <div><label for="tU">Utilization <output id="tUo"></output></label><input type="range" id="tU" min="10" max="100" value="40"></div>
+        <div><label for="tC">Number of GPUs <output id="tCo"></output></label><input type="range" id="tC" min="0" max="10" value="3"></div>
+      </div>
+      <div class="readout"><div><small>Total compute</small><strong id="tF"></strong></div><div><small>Training time</small><strong id="tT"></strong></div><div><small>Cost</small><strong id="tCost"></strong></div><div><small>GPU-hours</small><strong id="tGH"></strong></div></div>
+      <p class="hint">Prices are rough cloud rates and change often. Real runs rarely exceed about 50% utilization.</p>
+    </div>
+  </div>
+
+  <h2>Measuring Memory</h2>
+  <p>Memory decides whether a model can run on a GPU at all. If everything it needs doesn't fit in VRAM, the job crashes with <span class="mono">CUDA out of memory</span>, however fast the GPU is. So before choosing a GPU, we add up what has to be stored.</p>
+  <h3>How numbers are stored</h3>
+  <p>Every number in a model is stored with a fixed number of bits. More bits means more precision, and more memory.</p>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>Format</th><th>Bytes per number</th><th>Used for</th></tr></thead><tbody>
+    <tr><td>float32</td><td class="mono">4</td><td>Classic training, optimizer states</td></tr>
+    <tr><td>bfloat16</td><td class="mono">2</td><td>Modern training and inference: same range as float32, less precision</td></tr>
+    <tr><td>int8</td><td class="mono">1</td><td>Quantized inference</td></tr>
+    <tr><td>int4</td><td class="mono">0.5</td><td>Aggressive quantized inference</td></tr>
+  </tbody></table></div>
+  <figure class="eq" aria-label="Parameter memory equals N times bytes per parameter">
+    <math display="block"><mrow><mtext>Parameter memory</mtext><mo>=</mo><mi class="cg">N</mi><mo>×</mo><mtext class="co">bytes per parameter</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>N</b> parameters</span><span><i class="bg-o"></i><b>bytes</b> 4, 2, 1 or 0.5</span></figcaption>
+  </figure>
+  <p>A 7B model in bfloat16 needs 7 × 10⁹ × 2 bytes = 14 GB just for its weights. But weights are only part of the story.</p>
+
+  <h3>What fills GPU memory during training</h3>
+  <p>To learn, the model must remember how it got its answer and how to improve it, so training stores four things:</p>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Weights (parameters)</h4><p>The model itself: every number it has learned so far.</p></div>
+    <div class="tile t-peach"><h4>Gradients</h4><p>One per parameter: how each weight should change to reduce the loss.</p></div>
+    <div class="tile t-pink"><h4>Optimizer states</h4><p>Adam keeps two per parameter: momentum (a running average of gradients) and variance (a running average of squared gradients).</p></div>
+    <div class="tile t-blue"><h4>Activations</h4><p>The outputs of every layer, saved during the forward pass so the backward pass can compute gradients.</p></div>
+  </div>
+  <figure class="eq" aria-label="Training memory is parameters plus gradients plus optimizer states plus activations">
+    <math display="block"><mrow><mtext>Training memory</mtext><mo>≈</mo><mtext class="cg">weights</mtext><mo>+</mo><mtext class="co">gradients</mtext><mo>+</mo><mtext class="cr">optimizer states</mtext><mo>+</mo><mtext class="ct">activations</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i>N × bytes</span><span><i class="bg-o"></i>one per parameter</span><span><i class="bg-r"></i>two per parameter with Adam</span><span><i class="bg-t"></i>grows with batch size</span></figcaption>
+  </figure>
+
+  <h3>What fills GPU memory during inference</h3>
+  <p>When we only run the model, nothing is learned, so gradients and optimizer states disappear. Three things remain:</p>
+  <div class="grid3">
+    <div class="tile t-sage"><h4>Weights</h4><p>Still the whole model, usually the biggest item.</p></div>
+    <div class="tile t-blue"><h4>Temporary activations</h4><p>Only the current layer's outputs, thrown away as soon as the next layer has used them.</p></div>
+    <div class="tile t-lav"><h4>KV cache</h4><p>Keys and values of earlier tokens, kept so they aren't recomputed for every new token (Module 6).</p></div>
+  </div>
+  <figure class="eq" aria-label="Inference memory is weights plus KV cache plus temporary activations">
+    <math display="block"><mrow><mtext>Inference memory</mtext><mo>≈</mo><mtext class="cg">weights</mtext><mo>+</mo><mtext class="cv">KV cache</mtext><mo>+</mo><mtext class="ct">temporary activations</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i>N × bytes</span><span><i class="bg-v"></i>grows with batch size and conversation length</span><span><i class="bg-t"></i>small and short-lived</span></figcaption>
+  </figure>
+
+  <h3>The role of batch size</h3>
+  <p>The <b>batch size</b> is how many examples (or users) the GPU processes at once. It splits memory into two kinds:</p>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Fixed by the model</h4><p>Weights, gradients and optimizer states depend only on the number of parameters. Changing the batch size doesn't change them.</p></div>
+    <div class="tile t-peach"><h4>Grows with the batch</h4><p>Activations in training, and the KV cache in inference, are stored for every example. Double the batch size and they double. Longer sequences grow them too.</p></div>
+  </div>
+  <p style="margin-top:14px">That's why the classic fix for an out-of-memory error is to <b>lower the batch size</b>: it shrinks the part that grows, without touching the model.</p>
+
+  <div class="widget" id="w-mem">
+    <div class="widget-h"><h3>Will it fit? Pack Ben's backpack</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl">
+        <div><label for="mN">Parameters <output id="mNo"></output></label><input type="range" id="mN" min="0" max="100" value="45"></div>
+        <div><label>Mode</label><div class="seg" id="mMode"><button aria-pressed="true" data-v="train">Training (Adam)</button><button aria-pressed="false" data-v="infer">Inference</button></div></div>
+        <div><label>Precision</label><div class="seg" id="mP"><button aria-pressed="false" data-v="4">float32</button><button aria-pressed="true" data-v="2">bfloat16</button><button aria-pressed="false" data-v="1">int8</button><button aria-pressed="false" data-v="0.5">int4</button></div></div>
+        <div><label for="mB">Batch size <output id="mBo"></output></label><input type="range" id="mB" min="0" max="7" value="2"></div>
+        <div><label for="mS">Sequence length</label><select id="mS"><option value="512">512 tokens</option><option value="2048" selected>2,048 tokens</option><option value="8192">8,192 tokens</option></select></div>
+        <div><label for="mV">GPU memory</label><select id="mV"><option value="16">16 GB (T4)</option><option value="24">24 GB (RTX 4090)</option><option value="40">40 GB (A100 40GB)</option><option value="80" selected>80 GB (A100 or H100 80GB)</option></select></div>
+      </div>
+      <div style="margin:28px 0 8px"><div class="stack" id="mStack"></div></div>
+      <div class="readout" style="margin-top:14px" id="mParts"></div>
+      <div class="verdict" id="mVerdict"></div>
+      <p class="hint">Rule of thumb from the lecture: one gradient per parameter, and Adam keeps two optimizer states (momentum and variance) per parameter. Activations and the KV cache are estimated for a standard transformer in bfloat16.</p>
+    </div>
+  </div>
+  <div class="ben"><div class="stage"><img src="assets/img/ben_fire.webp" alt="Ben, fired up"></div>
+    <div class="say"><p>Training needs about <b>4× the weights</b> plus activations, while inference needs little more than the weights. That's why a model you can <b>run</b> on a laptop can still be impossible to <b>train</b> there.</p></div></div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="22">See slides 22 to 46</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#m1">Previous: Why GPUs?</a><button class="btn" data-complete="m2" data-next="#m3">Mark done and continue</button></div>
+</section>
+
+<!-- ================= M3 ================= -->
+<section class="view" data-view="m3" aria-labelledby="h-m3">
+  <p class="kicker">Module 3 of 6</p>
+  <h1 id="h-m3">What is limiting my GPU?</h1>
+  <p class="lede">Before optimizing anything, find the bottleneck. A GPU is usually held back by one of four things.</p>
+  <div class="grid4">
+    <div class="tile t-sage"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg></div><h4>Compute-bound</h4><p>The cores are busy doing maths.</p></div>
+    <div class="tile t-lav"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg></div><h4>Memory-bound</h4><p>The model or data doesn't fit in VRAM.</p></div>
+    <div class="tile t-blue"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></div><h4>Memory-bandwidth-bound</h4><p>Data can't reach the cores fast enough.</p></div>
+    <div class="tile t-peach"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M12 7.5v4M12 11.5l-5.5 4.5M12 11.5l5.5 4.5"/></svg></div><h4>Communication-bound</h4><p>GPUs wait on data from each other.</p></div>
+  </div>
+
+  <div class="widget">
+    <div class="widget-h"><h3>Think about Attention</h3><span class="tag">Quick check</span></div>
+    <div class="widget-b">
+      <p class="q-text" style="font-size:18px">What kind of bottleneck does Attention usually have?</p>
+      <div class="opts" id="attnQ"></div>
+      <div id="attnOut" class="explain" hidden></div>
+    </div>
+  </div>
+
+  <h2>A GPU has two kinds of memory</h2>
+  <div class="mem-diagram">
+    <div class="chip"><span class="lab">The GPU chip</span>
+      <div class="tile t-sage" style="text-align:center"><h4>Compute cores</h4><p>Do the maths</p></div>
+      <div class="tile t-lav" style="text-align:center"><h4>SRAM</h4><p>Tiny, very fast, on the chip</p></div>
+    </div>
+    <div class="muted" style="text-align:center;font-weight:600">slow trip<br>⇄</div>
+    <div class="tile t-blue" style="text-align:center;padding:26px 18px"><h4>HBM (VRAM)</h4><p>Huge, but much slower to reach</p></div>
+  </div>
+  <p style="margin-top:16px">On an H100, on-chip SRAM is measured in tens of megabytes, while HBM holds 80 GB and moves about 3.35 TB per second. Every trip to HBM costs time.</p>
+
+  <h2>Attention builds a big table</h2>
+  <figure class="eq" aria-label="Attention of Q K V equals softmax of Q K transpose over square root of d k, times V">
+    <math display="block"><mrow><mtext>Attention</mtext><mo>(</mo><mi class="cg">Q</mi><mo>,</mo><mi class="ct">K</mi><mo>,</mo><mi class="co">V</mi><mo>)</mo><mo>=</mo><mtext>softmax</mtext><mrow><mo>(</mo><mfrac><mrow><mi class="cg">Q</mi><msup><mi class="ct">K</mi><mi class="ct">T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo></mrow><mi class="co">V</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>Q</b> what each token is looking for</span><span><i class="bg-t"></i><b>K</b> what each token offers</span><span><i class="bg-o"></i><b>V</b> the information passed on</span><span><i class="bg-v"></i><b>QKᵀ</b> an n × n table of scores</span></figcaption>
+  </figure>
+
+  <div class="widget" id="w-attn">
+    <div class="widget-h"><h3>Watch the table grow</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="aN">Sequence length (tokens) <output id="aNo"></output></label><input type="range" id="aN" min="7" max="15" value="10"></div></div>
+      <div class="grid2" style="align-items:center">
+        <div class="attn-grid" id="aGrid" aria-hidden="true"></div>
+        <div class="readout" style="grid-template-columns:1fr"><div><small>Scores per head, per layer</small><strong id="aCells"></strong></div><div><small>Memory per head (bfloat16)</small><strong id="aMem"></strong></div><div><small>Across 32 heads and 32 layers</small><strong id="aAll"></strong></div></div>
+      </div>
+      <p class="hint">Double the sequence length and the table gets four times bigger: attention cost grows with n².</p>
+    </div>
+  </div>
+
+  <h2>Easy maths, huge data: arithmetic intensity</h2>
+  <figure class="eq" aria-label="Arithmetic intensity equals FLOPs divided by bytes moved">
+    <math display="block"><mrow><mtext>Arithmetic intensity</mtext><mo>=</mo><mfrac><mtext class="cgr">FLOPs</mtext><mtext class="cb">bytes moved</mtext></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-gr"></i>useful maths</span><span><i class="bg-b"></i>data fetched from HBM</span></figcaption>
+  </figure>
+  <p>An H100 can do about 300 FLOPs in the time it moves one byte from HBM. Operations with far fewer FLOPs per byte, like softmax over the attention table, leave the cores waiting. That is <b>memory-bandwidth-bound</b>.</p>
+
+  <h2>FlashAttention: move less data</h2>
+  <div class="widget" id="w-flash">
+    <div class="widget-h"><h3>Standard attention vs FlashAttention</h3><span class="tag">Animation</span></div>
+    <div class="widget-b">
+      <div class="row" style="margin-bottom:14px"><div class="seg" id="fMode"><button aria-pressed="true" data-v="std">Standard</button><button aria-pressed="false" data-v="flash">FlashAttention</button></div><button class="btn ghost" id="fPlay">Play</button></div>
+      <div class="grid2" style="align-items:center">
+        <div class="attn-grid" id="fGrid" aria-hidden="true" style="grid-template-columns:repeat(8,1fr)"></div>
+        <div>
+          <div class="readout" style="grid-template-columns:1fr"><div><small>Score values written to HBM</small><strong id="fW">0</strong></div><div><small>Score values read back from HBM</small><strong id="fR">0</strong></div></div>
+          <p class="hint" id="fNote">Standard attention writes the whole score table to HBM, then reads it back for softmax and again to multiply by V.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="take">FlashAttention computes exact attention in small tiles that fit in SRAM. The full table never travels to HBM. Same maths, far less data movement.</div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="47">See slides 47 to 56</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#m2">Previous: Measuring Compute and Memory</a><button class="btn" data-complete="m3" data-next="#m4">Mark done and continue</button></div>
+</section>
+
+<!-- ================= M4 ================= -->
+<section class="view" data-view="m4" aria-labelledby="h-m4">
+  <p class="kicker">Module 4 of 6</p>
+  <h1 id="h-m4">Pack the bag smarter: single-GPU tricks</h1>
+  <p class="lede">Your GPU memory is a backpack. When it overflows, you can buy a bigger bag (expensive), pack smarter (this module), or share the load (Module 5).</p>
+  <div class="grid2" style="align-items:center">
+    <figure class="card" style="display:grid;place-items:center;background:var(--stage)"><img src="assets/img/bag_full.webp" alt="An open purple backpack holding books labelled Model Weights, Activations, Gradients and Optimizer States" style="max-height:300px"></figure>
+    <div class="grid2" style="grid-template-columns:1fr">
+      <div class="tile t-blue"><h4>Quantization</h4><p>Smaller items: paperbacks instead of hardcovers.</p></div>
+      <div class="tile t-sage"><h4>Mixed precision</h4><p>Mix sizes: full folders only for important documents.</p></div>
+      <div class="tile t-lav"><h4>Gradient accumulation</h4><p>Several smaller trips instead of one overloaded one.</p></div>
+    </div>
+  </div>
+
+  <h2>Quantization: keep fewer digits</h2>
+  <figure class="card" style="background:var(--stage)"><img src="assets/img/books.webp" alt="Four large hardcover books become four small paperbacks" style="margin:auto;max-height:150px"></figure>
+  <p style="margin-top:16px">We already do this with π: 3.14159265 becomes 3.14. Quantization stores each weight with fewer bits, so it takes less memory and less time to move, at a small cost in accuracy.</p>
+  <div class="widget" id="w-quant">
+    <div class="widget-h"><h3>Same model, four formats</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="qN">Parameters <output id="qNo"></output></label><input type="range" id="qN" min="0" max="100" value="45"></div><div><label for="qV">GPU memory</label><select id="qV"><option value="16" selected>16 GB</option><option value="24">24 GB</option><option value="40">40 GB</option><option value="80">80 GB</option></select></div></div>
+      <div id="qBars" style="display:grid;gap:10px;margin-top:6px"></div>
+    </div>
+  </div>
+
+  <h2>Mixed precision: fast where we can, precise where we must</h2>
+  <figure class="card" style="background:var(--stage)"><img src="assets/img/folders.webp" alt="Four big folders become two big folders for important documents and two compact ones" style="margin:auto;max-height:150px"></figure>
+  <p style="margin-top:16px">Most of the maths (forward and backward passes) runs in bfloat16. A float32 copy of the weights, the master weights, receives the updates. Why? Try it.</p>
+  <div class="widget" id="w-mp">
+    <div class="widget-h"><h3>Can a tiny update survive?</h3><span class="tag">Real bfloat16 rounding</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="mpW">Weight</label><input type="number" id="mpW" value="1" step="0.1"></div><div><label for="mpU">Update (learning rate × gradient)</label><input type="number" id="mpU" value="0.001" step="0.0001"></div></div>
+      <div class="readout"><div><small>float32 result</small><strong id="mp32"></strong></div><div><small>bfloat16 result</small><strong id="mp16"></strong></div></div>
+      <div class="verdict" id="mpV"></div>
+    </div>
+  </div>
+  <figure class="eq" aria-label="Weight update: w becomes w minus eta times gradient of L with respect to w">
+    <math display="block"><mrow><mi class="cg">w</mi><mo>←</mo><mi class="cg">w</mi><mo>−</mo><mi class="ct">η</mi><mo>·</mo><msub><mo class="co">∇</mo><mi class="co">w</mi></msub><mi class="co">L</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>w</b> master weight, kept in float32</span><span><i class="bg-t"></i><b>η</b> learning rate</span><span><i class="bg-o"></i><b>∇L</b> gradient, computed in bfloat16</span></figcaption>
+  </figure>
+
+  <h2>Gradient accumulation: several trips</h2>
+  <figure class="card" style="background:var(--stage)"><img src="assets/img/trips.webp" alt="One full backpack becomes four smaller backpack trips" style="margin:auto;max-height:120px"></figure>
+  <div class="widget" id="w-ga">
+    <div class="widget-h"><h3>Batch of 64 on a GPU that fits 16</h3><span class="tag">Step through it</span></div>
+    <div class="widget-b">
+      <div class="grid4" id="gaSteps"></div>
+      <div style="margin:16px 0 6px;font-size:14px;font-weight:600;color:var(--muted)">Accumulated gradient</div>
+      <div class="stack" style="height:26px"><span id="gaBar" style="width:0;background:var(--lav)"></span></div>
+      <div class="row" style="margin-top:14px"><button class="btn" id="gaNext">Run micro-batch 1</button><button class="btn ghost" id="gaReset">Reset</button></div>
+      <div class="verdict mid" id="gaV">Each micro-batch computes gradients but doesn't update the weights yet.</div>
+    </div>
+  </div>
+  <div class="take">Gradient accumulation gives big-batch stability with small-batch memory. The cost is time: each update needs several forward and backward passes.</div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="57">See slides 57 to 68</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#m3">Previous: GPU Bottlenecks</a><button class="btn" data-complete="m4" data-next="#m5">Mark done and continue</button></div>
+</section>
+
+<!-- ================= M5 ================= -->
+<section class="view" data-view="m5" aria-labelledby="h-m5">
+  <p class="kicker">Module 5 of 6</p>
+  <h1 id="h-m5">Multi-GPU training: share the load</h1>
+  <p class="lede">Sometimes one bag isn't enough. The model doesn't fit, or training would take months. Then we split the work, and the art is choosing what to split.</p>
+  <div class="ben"><div class="stage"><img src="assets/img/ben_think.webp" alt="Ben thinking"></div>
+    <div class="say"><p>If I give my friends part of the load, they have to <b>talk to each other</b>. So every strategy trades memory or time for <b>communication</b>.</p></div></div>
+
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>Strategy</th><th>What is split</th><th>Each GPU holds</th><th>Talks when</th><th>Use it when</th></tr></thead><tbody>
+    <tr><td><b>Data</b></td><td>The batch</td><td>A full copy of the model</td><td>After every step (gradients)</td><td>The model fits; training is too slow</td></tr>
+    <tr><td><b>ZeRO / FSDP</b></td><td>Optimizer states, gradients, weights</td><td>A slice of the training state</td><td>Every step, gathering slices</td><td>Training state doesn't fit</td></tr>
+    <tr><td><b>Tensor</b></td><td>Each layer's matrices</td><td>Part of every layer</td><td>Inside every layer</td><td>Layers are huge; GPUs share fast NVLink</td></tr>
+    <tr><td><b>Pipeline</b></td><td>The layers</td><td>A stage of consecutive layers</td><td>Between stages (activations)</td><td>The model is deep and spans machines</td></tr>
+  </tbody></table></div>
+
+  <h2>1. Data parallelism</h2>
+  <p>Every GPU gets a full copy of the model and a different slice of the batch. After the backward pass, the GPUs average their gradients with an <b>all-reduce</b>, so every copy takes the same update.</p>
+  <div class="widget" id="w-ring">
+    <div class="widget-h"><h3>Ring all-reduce</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="rG">GPUs <output id="rGo"></output></label><input type="range" id="rG" min="2" max="16" value="8"></div><div><label for="rP">Parameters <output id="rPo"></output></label><input type="range" id="rP" min="0" max="100" value="45"></div></div>
+      <div class="grid2" style="align-items:center"><div class="ring" id="ringSvg"></div>
+      <div class="readout" style="grid-template-columns:1fr"><div><small>Gradient size (bfloat16)</small><strong id="rM"></strong></div><div><small>Each GPU sends and receives per step</small><strong id="rS"></strong></div><div><small>Time per step over NVLink (900 GB/s)</small><strong id="rT"></strong></div></div></div>
+    </div>
+  </div>
+  <figure class="eq" aria-label="Data sent per GPU equals 2 times N minus 1 over N times M">
+    <math display="block"><mrow><mtext>Data per GPU</mtext><mo>=</mo><mn class="cv">2</mn><mfrac><mrow><mi class="cb">G</mi><mo>−</mo><mn>1</mn></mrow><mi class="cb">G</mi></mfrac><mo>×</mo><mi class="cg">M</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>2</b> reduce-scatter, then all-gather</span><span><i class="bg-b"></i><b>G</b> GPUs</span><span><i class="bg-g"></i><b>M</b> gradient size in bytes</span></figcaption>
+  </figure>
+  <p>The volume per GPU barely changes as you add GPUs: it approaches 2M. But every step must wait for it, which is why 8 GPUs rarely give 8× the speed.</p>
+
+  <h2>2. ZeRO and FSDP: stop storing copies</h2>
+  <p>Plain data parallelism stores the full training state on every GPU. With mixed-precision Adam that is about <b>16 bytes per parameter</b>: 2 for bfloat16 weights, 2 for gradients and 12 for float32 master weights and Adam's two states. ZeRO shards this state across GPUs instead.</p>
+  <div class="widget" id="w-zero">
+    <div class="widget-h"><h3>Memory per GPU with ZeRO</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="zP">Parameters <output id="zPo"></output></label><input type="range" id="zP" min="0" max="100" value="60"></div><div><label for="zG">GPUs <output id="zGo"></output></label><input type="range" id="zG" min="1" max="64" value="8"></div></div>
+      <div id="zBars" style="display:grid;gap:10px"></div>
+      <p class="hint">Stage 1 shards optimizer states, stage 2 adds gradients, stage 3 (like PyTorch FSDP) adds the weights. Activations are extra.</p>
+    </div>
+  </div>
+  <figure class="eq" aria-label="ZeRO stage 3 memory per GPU equals 16 times psi over G">
+    <math display="block"><mrow><msub><mtext>Memory</mtext><mtext>ZeRO-3</mtext></msub><mo>≈</mo><mfrac><mrow><mn class="cv">16</mn><mo>×</mo><mi class="cg">Ψ</mi></mrow><mi class="cb">G</mi></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>16</b> bytes per parameter of training state</span><span><i class="bg-g"></i><b>Ψ</b> parameters</span><span><i class="bg-b"></i><b>G</b> GPUs sharing it</span></figcaption>
+  </figure>
+
+  <h2>3. Tensor parallelism: split each layer</h2>
+  <p>A single matrix multiplication is split across GPUs. In a transformer MLP, the first weight matrix is split by <b>columns</b> and the second by <b>rows</b>, so each GPU computes its half end to end and the GPUs only need one all-reduce at the end of the block.</p>
+  <div class="card" id="tpDiagram" style="overflow-x:auto"></div>
+  <p style="margin-top:14px">Because GPUs talk inside every layer, tensor parallelism needs very fast links. It is usually kept within one machine, where GPUs share NVLink at around 900 GB/s, rather than across machines on a network that is often 10 to 20 times slower.</p>
+
+  <h2>4. Pipeline parallelism: split the layers</h2>
+  <p>Consecutive layers become stages on different GPUs, like an assembly line. To keep everyone busy, the batch is cut into <b>micro-batches</b>. The idle gaps at the start and end are called the <b>bubble</b>.</p>
+  <div class="widget" id="w-pipe">
+    <div class="widget-h"><h3>Pipeline schedule</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl"><div><label for="pS">Stages (GPUs) <output id="pSo"></output></label><input type="range" id="pS" min="2" max="6" value="4"></div><div><label for="pM">Micro-batches <output id="pMo"></output></label><input type="range" id="pM" min="1" max="12" value="4"></div></div>
+      <div class="gantt" id="gantt"></div>
+      <div class="row" style="margin-top:10px;font-size:13px;color:var(--muted)"><span class="pill" style="background:var(--blue-soft);color:var(--blue-ink)">F forward</span><span class="pill" style="background:var(--sage);color:var(--sage-ink)">B backward</span><span class="pill">hatched: idle bubble</span></div>
+      <div class="verdict mid" id="pV"></div>
+    </div>
+  </div>
+  <figure class="eq" aria-label="Bubble fraction equals p minus 1 over m plus p minus 1">
+    <math display="block"><mrow><mtext>Bubble fraction</mtext><mo>=</mo><mfrac><mrow><mi class="cb">p</mi><mo>−</mo><mn>1</mn></mrow><mrow><mi class="cg">m</mi><mo>+</mo><mi class="cb">p</mi><mo>−</mo><mn>1</mn></mrow></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-b"></i><b>p</b> pipeline stages</span><span><i class="bg-g"></i><b>m</b> micro-batches</span></figcaption>
+  </figure>
+
+  <h2>Putting it together: 3D parallelism</h2>
+  <p>The largest models combine all three: tensor parallelism inside each machine, pipeline parallelism across machines, and data parallelism across copies of the whole setup. The design goal is always the same: keep the chattiest communication on the fastest links.</p>
+  <div class="widget">
+    <div class="widget-h"><h3>Which strategy fits?</h3><span class="tag">Quick check</span></div>
+    <div class="widget-b" id="stratQ"></div>
+  </div>
+  <div class="take">More GPUs means more communication. Choose the strategy that splits what is too big, and keep the talking on the fastest links.</div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="69">See slides 69 to 70</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#m4">Previous: Single-GPU Memory Optimization Tricks</a><button class="btn" data-complete="m5" data-next="#m6">Mark done and continue</button></div>
+</section>
+
+<!-- ================= M6 ================= -->
+<section class="view" data-view="m6" aria-labelledby="h-m6">
+  <p class="kicker">Module 6 of 6</p>
+  <h1 id="h-m6">Inference engineering: serving real users</h1>
+  <p class="lede">Training happens once. Inference happens every time someone sends a message, millions of times a day. For popular models, serving can cost more than training over the model's lifetime.</p>
+
+  <h2>Two phases of every request</h2>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Prefill: read the prompt</h4><p>All prompt tokens are processed in parallel in one big pass. Lots of maths per byte, so it is <b>compute-bound</b>. It sets the <b>time to first token</b>.</p></div>
+    <div class="tile t-blue"><h4>Decode: write the answer</h4><p>One token at a time. Each step reads every weight and the whole KV cache for very little maths, so it is <b>memory-bandwidth-bound</b>. It sets the <b>time per output token</b>.</p></div>
+  </div>
+  <figure class="eq" aria-label="Latency equals time to first token plus number of output tokens minus one times time per output token">
+    <math display="block"><mrow><mtext>Latency</mtext><mo>≈</mo><mtext class="cgr">TTFT</mtext><mo>+</mo><mo>(</mo><mi class="cg">n</mi><mo>−</mo><mn>1</mn><mo>)</mo><mo>×</mo><mtext class="cb">TPOT</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-gr"></i><b>TTFT</b> time to first token (prefill)</span><span><i class="bg-g"></i><b>n</b> output tokens</span><span><i class="bg-b"></i><b>TPOT</b> time per output token (decode)</span></figcaption>
+  </figure>
+
+  <h2>Why decode is limited by bandwidth</h2>
+  <p>To produce one token for one user, the GPU must stream every weight from HBM. So the fastest possible decode speed is set by memory bandwidth, not FLOPS.</p>
+  <figure class="eq" aria-label="Tokens per second per user is at most memory bandwidth divided by bytes read per token">
+    <math display="block"><mrow><mfrac><mtext>tokens</mtext><mtext>second</mtext></mfrac><mo>≤</mo><mfrac><mtext class="cb">memory bandwidth</mtext><mtext class="co">bytes read per token</mtext></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-b"></i>e.g. 3.35 TB/s on an H100</span><span><i class="bg-o"></i>all weights + this user's KV cache</span></figcaption>
+  </figure>
+  <div class="widget" id="w-dec">
+    <div class="widget-h"><h3>Decode speed estimator</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl">
+        <div><label for="dN">Parameters <output id="dNo"></output></label><input type="range" id="dN" min="0" max="100" value="45"></div>
+        <div><label>Weight format</label><div class="seg" id="dP"><button aria-pressed="true" data-v="2">bfloat16</button><button aria-pressed="false" data-v="1">int8</button><button aria-pressed="false" data-v="0.5">int4</button></div></div>
+        <div><label for="dG">GPU</label><select id="dG"><option value="320">T4 (320 GB/s)</option><option value="2039">A100 80GB (2.0 TB/s)</option><option value="3350" selected>H100 (3.35 TB/s)</option></select></div>
+        <div><label for="dB">Users batched together <output id="dBo"></output></label><input type="range" id="dB" min="0" max="7" value="0"></div>
+      </div>
+      <div class="readout"><div><small>Weights to read per step</small><strong id="dW"></strong></div><div><small>Best case per user</small><strong id="dU"></strong></div><div><small>Best case total throughput</small><strong id="dT"></strong></div></div>
+      <p class="hint">Batching reuses each weight read for many users, so throughput rises almost for free until compute or KV cache memory runs out. Quantizing weights cuts the bytes per step, which speeds decode directly. These are upper bounds that ignore the KV cache and overheads.</p>
+    </div>
+  </div>
+
+  <h2>The KV cache</h2>
+  <p>When generating token 500, the model needs the keys and values of the 499 tokens before it. Recomputing them every step would be wasteful, so they are stored in the <b>KV cache</b>. It speeds decode up, but it eats memory, and it grows with every token and every user.</p>
+  <figure class="eq" aria-label="KV cache size equals 2 times L times H k v times d head times S times B times bytes">
+    <math display="block"><mrow><mtext>KV cache</mtext><mo>=</mo><mn class="cv">2</mn><mo>×</mo><mi class="cg">L</mi><mo>×</mo><msub><mi class="ct">H</mi><mtext class="ct">kv</mtext></msub><mo>×</mo><msub><mi class="co">d</mi><mtext class="co">head</mtext></msub><mo>×</mo><mi class="cb">S</mi><mo>×</mo><mi class="cr">B</mi><mo>×</mo><mtext>bytes</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>2</b> one K and one V</span><span><i class="bg-g"></i><b>L</b> layers</span><span><i class="bg-t"></i><b>H<sub>kv</sub></b> key/value heads</span><span><i class="bg-o"></i><b>d<sub>head</sub></b> head size</span><span><i class="bg-b"></i><b>S</b> tokens so far</span><span><i class="bg-r"></i><b>B</b> users in the batch</span></figcaption>
+  </figure>
+  <div class="widget" id="w-kv">
+    <div class="widget-h"><h3>KV cache calculator</h3><span class="tag">Interactive</span></div>
+    <div class="widget-b">
+      <div class="ctl">
+        <div><label>Model</label><div class="seg" id="kM"><button aria-pressed="true" data-v="mha">Llama 2 7B (32 KV heads)</button><button aria-pressed="false" data-v="gqa">Llama 3 8B (8 KV heads, GQA)</button></div></div>
+        <div><label for="kS">Tokens per conversation <output id="kSo"></output></label><input type="range" id="kS" min="9" max="17" value="12"></div>
+        <div><label for="kB">Concurrent users <output id="kBo"></output></label><input type="range" id="kB" min="0" max="8" value="5"></div>
+      </div>
+      <div class="readout"><div><small>KV cache per token</small><strong id="kTok"></strong></div><div><small>Per conversation</small><strong id="kSeq"></strong></div><div><small>All users</small><strong id="kAll"></strong></div></div>
+      <div class="verdict" id="kV"></div>
+    </div>
+  </div>
+  <p><b>Grouped-query attention (GQA)</b> lets several query heads share one key/value head, so the cache shrinks. Llama 3 8B uses 8 KV heads instead of 32: a 4× smaller cache for almost the same quality.</p>
+
+  <h2>Batching: keep the GPU full</h2>
+  <div class="grid2">
+    <div class="tile t-pink"><h4>Static batching</h4><p>The whole batch waits until its longest answer finishes. Short requests leave empty slots, wasting the GPU.</p></div>
+    <div class="tile t-sage"><h4>Continuous batching</h4><p>Finished requests leave and new ones join at every decode step, so slots stay full. Used by engines like vLLM, SGLang and TensorRT-LLM.</p></div>
+  </div>
+  <p style="margin-top:14px"><b>PagedAttention</b> (vLLM) stores the KV cache in small fixed-size blocks, like pages in an operating system. Memory isn't reserved for the longest possible answer up front, so many more users fit on one GPU.</p>
+
+  <h2>Speculative decoding</h2>
+  <div class="flow"><div class="node" style="background:var(--lav);color:var(--lav-ink)">Small draft model guesses 4 tokens</div><span class="arr">→</span><div class="node" style="background:var(--blue-soft);color:var(--blue-ink)">Big model checks all 4 in one pass</div><span class="arr">→</span><div class="node" style="background:var(--sage);color:var(--sage-ink)">Keep the guesses it agrees with</div></div>
+  <p>Checking several tokens at once costs about the same as generating one, because decode is memory-bound. When the draft is right, you get several tokens for the price of one step, and the output follows exactly the same distribution as the big model alone.</p>
+
+  <h2>What inference engineers optimize</h2>
+  <div class="grid4">
+    <div class="tile t-blue"><h4>Latency</h4><p>TTFT and time per token for each user.</p></div>
+    <div class="tile t-sage"><h4>Throughput</h4><p>Tokens per second across all users.</p></div>
+    <div class="tile t-peach"><h4>Cost</h4><p>Price per million tokens.</p></div>
+    <div class="tile t-lav"><h4>Memory</h4><p>Weights plus the KV cache for every user.</p></div>
+  </div>
+  <div class="take">Bigger batches raise throughput but make each user wait longer. Inference engineering is choosing the right point on that trade-off, then using quantization, KV cache tricks, batching and speculation to move the whole curve.</div>
+  <div class="ben"><div class="stage"><img src="assets/img/ben_idea.webp" alt="Ben with an idea"></div>
+    <div class="say"><p>It all connects! Decode is <b>memory-bandwidth-bound</b>, so anything that moves fewer bytes per token (quantization, GQA, batching) makes it faster. Same lesson as FlashAttention: <b>move less data</b>.</p></div></div>
+  <div class="row"><a class="slide-link" href="#slides" data-goto="72">See slides 72 to 74</a></div>
+  <div class="mod-foot"><a class="btn ghost" href="#m5">Previous: Multi-GPU Training</a><button class="btn" data-complete="m6" data-next="#quiz">Mark done and take the quiz</button></div>
+</section>
+
+<!-- ================= SLIDES ================= -->
+<section class="view wide" data-view="slides" aria-labelledby="h-slides">
+  <p class="kicker">Lecture slides</p>
+  <h1 id="h-slides">GPUs and Inference Engineering</h1>
+  <p class="lede">Browse the full deck. Use the arrow keys, or jump with the thumbnails.</p>
+  <div class="viewer">
+    <div class="screen"><img id="slideImg" alt=""></div>
+    <div class="row" style="justify-content:space-between"><div class="row"><button class="btn ghost" id="sPrev">Previous</button><button class="btn ghost" id="sNext">Next</button></div><div class="muted" id="sCount" aria-live="polite"></div><button class="btn" data-dl="slides">Download slides (PDF)</button></div>
+    <div class="thumbs" id="thumbs"></div>
+  </div>
+</section>
+
+<!-- ================= QUIZ ================= -->
+<section class="view" data-view="quiz" aria-labelledby="h-quiz">
+  <p class="kicker">Check your understanding</p>
+  <h1 id="h-quiz">GPU and acceleration quiz</h1>
+  <p class="lede">12 questions in the order the course teaches them. Pick an answer to see whether you're right and why.</p>
+  <div class="card" id="quizCard"></div>
+</section>
+
+<!-- ================= WORKSHEET ================= -->
+<section class="view" data-view="worksheet" aria-labelledby="h-ws">
+  <p class="kicker">Group activity: work in pairs</p>
+  <h1 id="h-ws">Choose Your GPU</h1>
+  <p class="lede">Plan your team's training run and deployment. Show every calculation, then check your answers here.</p>
+  <div class="row" style="margin-bottom:18px"><button class="btn ghost" data-dl="worksheet">Download the printable worksheet (PDF)</button></div>
+  <div class="card" style="background:var(--yellow);border-color:transparent">
+    <p><b>Your team:</b> a startup in Cape Town building an LLM for a customer service assistant that classifies support tickets by urgency and responds to customers.</p>
+    <p><b>The job:</b> train a 1B parameter LLM on 20B tokens in bfloat16 with Adam, then deploy it. Training activations: 12 GB. Budget: $1,000. Deadline: 72 hours.</p>
+    <div class="tbl-wrap"><table class="data"><thead><tr><th>GPU</th><th>VRAM</th><th>Speed</th><th>Price per hour</th></tr></thead><tbody><tr><td>A</td><td>16 GB</td><td>100 TFLOPS</td><td>$1</td></tr><tr><td>B</td><td>40 GB</td><td>300 TFLOPS</td><td>$4</td></tr><tr><td>C</td><td>80 GB</td><td>1,000 TFLOPS</td><td>$10</td></tr></tbody></table></div>
+    <p class="hint" style="margin:10px 0 0">Hint: FLOPs = 6 × N × D. Assume 100% utilization and perfect scaling. 1B = 10⁹, 1 TFLOPS = 10¹² FLOPS, 1 hour = 3,600 s.</p>
+  </div>
+  <div id="wsBody"></div>
+</section>
+
+<!-- ================= RESOURCES ================= -->
+<section class="view" data-view="resources" aria-labelledby="h-res">
+  <p class="kicker">Keep learning</p>
+  <h1 id="h-res">Resources</h1>
+  <p class="lede">Everything from the session, plus the best places to go deeper.</p>
+  <a class="feature" href="https://www.skills.google/paths/3135/course_templates/1555" target="_blank" rel="noopener">
+    <span><p class="tagline">Main course resource</p><h3>Google DeepMind AI Research Foundations: Course 07</h3><p>The official course this session is built on. Work through the full course materials and exercises.</p><span class="url">skills.google/paths/3135/course_templates/1555</span></span>
+    <span class="btn">Open the course</span>
+  </a>
+  <h2 style="margin-top:40px">Session materials</h2>
+  <div class="res">
+    <a href="#slides"><span class="ic t-lav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8"/></svg></span><span><h4>Lecture slides</h4><p>Browse all 78 slides online or download the PDF.</p></span></a>
+    <a href="#worksheet"><span class="ic t-sage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg></span><span><h4>Choose Your GPU worksheet</h4><p>Interactive answer checks and a printable PDF.</p></span></a>
+    <a href="#quiz"><span class="ic t-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg></span><span><h4>Quiz</h4><p>12 questions with explanations.</p></span></a>
+    <a href="#m1"><span class="ic t-peach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8.5 18H15a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h6.5"/></svg></span><span><h4>Learning modules</h4><p>Six interactive modules with calculators.</p></span></a>
+  </div>
+  <h2>Go deeper</h2>
+  <div class="res" id="extLinks"></div>
+  <h2>Key papers</h2>
+  <ul class="papers" id="papers"></ul>
+  <div class="ben" style="margin-top:46px"><div class="stage"><img src="assets/img/ben_heart.webp" alt="Ben making a heart with his hands"></div>
+    <div class="say"><p>Thank you for learning with me! From "why GPUs?" to serving real users: you've got this. Come back any time to try the calculators again.</p></div></div>
+</section>
+
+</main>
+<aside class="toc-rail" id="tocRail" aria-label="On this page" hidden><div class="tr-h"><b>On this page</b><button type="button" id="tocToggle" aria-expanded="true">Hide</button></div><ol class="toc-list" id="tocRailList"></ol></aside>
+</div>
+<footer class="foot">Built with ❤️ by <b>Simi Okunowo</b> <em>and Claude Opus 5.5</em></footer>
+
+<script id="slidesData" type="application/json">["assets/slides/slide-01.webp", "assets/slides/slide-02.webp", "assets/slides/slide-03.webp", "assets/slides/slide-04.webp", "assets/slides/slide-05.webp", "assets/slides/slide-06.webp", "assets/slides/slide-07.webp", "assets/slides/slide-08.webp", "assets/slides/slide-09.webp", "assets/slides/slide-10.webp", "assets/slides/slide-11.webp", "assets/slides/slide-12.webp", "assets/slides/slide-13.webp", "assets/slides/slide-14.webp", "assets/slides/slide-15.webp", "assets/slides/slide-16.webp", "assets/slides/slide-17.webp", "assets/slides/slide-18.webp", "assets/slides/slide-19.webp", "assets/slides/slide-20.webp", "assets/slides/slide-21.webp", "assets/slides/slide-22.webp", "assets/slides/slide-23.webp", "assets/slides/slide-24.webp", "assets/slides/slide-25.webp", "assets/slides/slide-26.webp", "assets/slides/slide-27.webp", "assets/slides/slide-28.webp", "assets/slides/slide-29.webp", "assets/slides/slide-30.webp", "assets/slides/slide-31.webp", "assets/slides/slide-32.webp", "assets/slides/slide-33.webp", "assets/slides/slide-34.webp", "assets/slides/slide-35.webp", "assets/slides/slide-36.webp", "assets/slides/slide-37.webp", "assets/slides/slide-38.webp", "assets/slides/slide-39.webp", "assets/slides/slide-40.webp", "assets/slides/slide-41.webp", "assets/slides/slide-42.webp", "assets/slides/slide-43.webp", "assets/slides/slide-44.webp", "assets/slides/slide-45.webp", "assets/slides/slide-46.webp", "assets/slides/slide-47.webp", "assets/slides/slide-48.webp", "assets/slides/slide-49.webp", "assets/slides/slide-50.webp", "assets/slides/slide-51.webp", "assets/slides/slide-52.webp", "assets/slides/slide-53.webp", "assets/slides/slide-54.webp", "assets/slides/slide-55.webp", "assets/slides/slide-56.webp", "assets/slides/slide-57.webp", "assets/slides/slide-58.webp", "assets/slides/slide-59.webp", "assets/slides/slide-60.webp", "assets/slides/slide-61.webp", "assets/slides/slide-62.webp", "assets/slides/slide-63.webp", "assets/slides/slide-64.webp", "assets/slides/slide-65.webp", "assets/slides/slide-66.webp", "assets/slides/slide-67.webp", "assets/slides/slide-68.webp", "assets/slides/slide-69.webp", "assets/slides/slide-70.webp", "assets/slides/slide-71.webp", "assets/slides/slide-72.webp", "assets/slides/slide-73.webp", "assets/slides/slide-74.webp", "assets/slides/slide-75.webp", "assets/slides/slide-76.webp", "assets/slides/slide-77.webp", "assets/slides/slide-78.webp"]</script>
+<script id="titlesData" type="application/json">["GPUs and Inference Engineering", "The Final Piece of the Puzzle", "Most valuable company?", "Interlude", "Join the Mentimeter Poll", "NVIDIA", "GPUs are so important!", "The Modern AI Stack", "Meet Ben!", "Don\u2019t Be Like Ben \u274c", "Before we get started", "01. The GPU", "The CPU", "CPU vs GPU: who would you hire?", "Now The GPU", "GPUs Are Very Important!", "When do you need a GPU?", "Inside the GPU system", "GPUs Can Have Bottlenecks", "The GPU as a factory", "Diagnose the bottleneck", "02. Measuring Compute & Memory", "Scaling Laws", "Why Measuring Compute and Memory Matters?", "Measuring Compute", "Counting operations", "FLOPs", "How We Measure Compute: FLOPs vs. FLOPS", "Estimating Compute for a Transformer Model", "Worked Example", "Money matters", "No free lunch", "Measuring Memory", "How Computers Store Numbers", "Precision: More Bits, More Accuracy", "Why is bfloat16 so common?", "What Fills GPU Memory", "What happens during training", "Optimizers", "What happens during inference", "What Fills GPU Memory", "Estimating Memory is Simple", "How Do We Estimate Memory For Training and Inference?", "GPU memory as a backpack", "Worked Example", "What eats your GPU memory", "03. GPU Performance Bottlenecks", "What Is Limiting My GPU?", "Think About Attention", "Think About Attention", "A GPU Has Two Kinds of Memory", "Attention Builds a Big Table", "The Table Doesn\u2019t Fit on the Chip", "Back and Forth, Again and Again", "FlashAttention: Move Less Data", "If data movement is the problem, move less data.", "04. GPU Optimization Techniques", "Why Do We Need to Optimize?", "Your GPU Memory Is a Backpack", "Three Tricks to Pack Smarter", "Our Brains Naturally \u201cQuantize\u201d", "Quantization", "What About Training?", "Mixed-Precision Training", "What Is a Batch?", "Large batches vs memory", "Gradient Accumulation", "Gradient Accumulation: An Example", "Sometimes, One Bag Is Not Enough", "Multi-GPU Training", "What Would You Do?", "05. Inference Engineering", "Why Inference Engineering Matters", "What Inference Engineers Optimize", "05. Using GPUs Responsibly", "GPU and Model Acceleration Activity", "What Next?", "Resources"]</script>
+<script id="pdfSlides" type="text/plain"></script>
+<script id="pdfWs" type="text/plain"></script>
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- formatting ---------- */
+function fmtBytes(b){const u=["B","KB","MB","GB","TB","PB"];let i=0;while(b>=1000&&i<u.length-1){b/=1000;i++}return (b>=100?b.toFixed(0):b>=10?b.toFixed(1):b.toFixed(2))+" "+u[i]}
+function fmtNum(n){if(n>=1e12)return (n/1e12).toFixed(n>=1e13?0:1)+"T";if(n>=1e9)return (n/1e9).toFixed(n>=1e10?0:1)+"B";if(n>=1e6)return (n/1e6).toFixed(n>=1e7?0:1)+"M";if(n>=1e3)return (n/1e3).toFixed(n>=1e4?0:1)+"K";return String(Math.round(n))}
+function sci(n){const e=Math.floor(Math.log10(n));const m=n/Math.pow(10,e);const sup="⁰¹²³⁴⁵⁶⁷⁸⁹";return m.toFixed(1)+" × 10"+String(e).split("").map(c=>sup[+c]).join("")}
+function fmtTime(h){if(h<1/60)return (h*3600).toFixed(1)+" s";if(h<1)return (h*60).toFixed(0)+" min";if(h<48)return h.toFixed(1)+" h";if(h<24*365)return (h/24).toFixed(0)+" days";return (h/24/365).toFixed(1)+" years"}
+function money(x){return x>=1e6?"$"+(x/1e6).toFixed(1)+"M":x>=1e3?"$"+Math.round(x).toLocaleString():"$"+x.toFixed(x<10?2:0)}
+const logScale=(v,lo,hi)=>lo*Math.pow(hi/lo,v/100);
+function seg(id,cb){const el=document.getElementById(id);el.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;el.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));cb&&cb(b.dataset.v)});return()=>el.querySelector('[aria-pressed="true"]').dataset.v}
+
+/* ---------- theme ---------- */
+const root=document.documentElement;const saved=store.get("gpu-ben-theme",null);if(saved)root.dataset.theme=saved;
+$("#themeBtn").addEventListener("click",()=>{const dark=root.dataset.theme?root.dataset.theme==="dark":matchMedia("(prefers-color-scheme: dark)").matches;root.dataset.theme=dark?"light":"dark";store.set("gpu-ben-theme",root.dataset.theme)});
+
+/* ---------- router & progress ---------- */
+const views=$$(".view");let done=new Set(store.get("gpu-ben-done",[]));
+function paintProgress(){const n=done.size;$("#progText").textContent=n+" of 6 modules done";$("#progBar").style.width=(n/6*100)+"%";$$("#pathList li").forEach(li=>li.classList.toggle("done",done.has(li.dataset.m)));$$("#journey a").forEach(a=>a.classList.toggle("done",done.has(a.dataset.m)))}
+function route(){let id=(location.hash||"#home").slice(1);if(!views.some(v=>v.dataset.view===id))id="home";views.forEach(v=>v.classList.toggle("on",v.dataset.view===id));
+  $$("#pathList a").forEach(a=>a.toggleAttribute("aria-current",a.getAttribute("href")==="#"+id));if($("#pathList a[aria-current]"))$("#pathList a[aria-current]").setAttribute("aria-current","page");
+  const navKey=/^m\d$/.test(id)?"learn":id;$$(".nav a").forEach(a=>a.dataset.nav===navKey?a.setAttribute("aria-current","page"):a.removeAttribute("aria-current"));
+  window.scrollTo({top:0,behavior:"instant"});if(id==="slides")showSlide(curSlide);}
+addEventListener("hashchange",route);
+document.addEventListener("click",e=>{const c=e.target.closest("[data-complete]");if(c){done.add(c.dataset.complete);store.set("gpu-ben-done",[...done]);paintProgress();location.hash=c.dataset.next}
+  const g=e.target.closest("[data-goto]");if(g){curSlide=+g.dataset.goto-1}});
+
+/* ---------- icons ---------- */
+
+/* ---------- hero die ---------- */
+(function(){const c=$("#die"),x=c.getContext("2d");const cols=20,rows=14;let t0=performance.now();
+  function draw(t){const W=c.width,H=c.height,cw=W/cols,ch=H/rows;x.clearRect(0,0,W,H);
+    for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){const d=Math.hypot(i-cols/2,j-rows/2);const ph=reduce?0.6:(Math.sin((t-t0)/420-d*0.55)+1)/2;
+      const a=0.18+0.82*Math.pow(ph,3);x.fillStyle=`rgba(${Math.round(70+60*a)},${Math.round(120+70*a)},${Math.round(230+25*a)},${0.25+0.75*a})`;
+      const r=4;const px=i*cw+3,py=j*ch+3,w=cw-6,h=ch-6;x.beginPath();x.moveTo(px+r,py);x.arcTo(px+w,py,px+w,py+h,r);x.arcTo(px+w,py+h,px,py+h,r);x.arcTo(px,py+h,px,py,r);x.arcTo(px,py,px+w,py,r);x.fill()}
+    if(!reduce&&performance.now()-t0<9000)requestAnimationFrame(draw)}
+  requestAnimationFrame(draw)})();
+
+/* ---------- M1 hire ---------- */
+$$("[data-hire]").forEach(b=>b.addEventListener("click",()=>{$$("[data-hire]").forEach(x=>{x.classList.remove("right","wrong");x.classList.add(x.dataset.hire==="b"?"right":"fade")});if(b.dataset.hire==="a")b.classList.add("wrong");
+  const o=$("#hireOut");o.hidden=false;o.innerHTML="<b>💡 The students win, easily.</b>Mathematicians: 1,000,000 ÷ 4 × 1 s = 250,000 s, about <b>69 hours</b>. Students: 1,000,000 ÷ 1,000 × 3 s = 3,000 s, about <b>50 minutes</b>. Many simple workers beat a few brilliant ones when the tasks don't depend on each other. That's a GPU."}));
+
+/* ---------- M1 matrix multiplication animation ---------- */
+(function(){const A=[[2,0,1],[1,3,2],[0,1,4]],B=[[1,2,0],[3,1,2],[2,0,1]];const C=A.map(r=>B[0].map((_,j)=>r.reduce((s,v,k)=>s+v*B[k][j],0)));
+  const fill=(id,M)=>{$("#"+id).innerHTML=M.flat().map(v=>`<i>${v}</i>`).join("")};fill("mmA",A);fill("mmB",B);fill("mmC",C);
+  const a=[...$("#mmA").children],b=[...$("#mmB").children],c=[...$("#mmC").children],out=$("#mmCalc");let timer=null,step=0;
+  const mode=seg("mmMode",()=>start());
+  function clear(){[...a,...b,...c].forEach(x=>x.className="")}
+  function cell(i,j,cls){for(let k=0;k<3;k++){a[i*3+k].classList.add("on");b[k*3+j].classList.add("on")}c[i*3+j].classList.add(cls)}
+  function tick(){const gpu=mode()==="gpu";
+    if(gpu){if(step===0){clear();out.textContent="Every core takes one cell..."}else if(step===1){for(let i=0;i<3;i++)for(let j=0;j<3;j++)cell(i,j,"on");out.textContent="All 9 cells computed in one step"}else if(step===2){clear();c.forEach(x=>x.classList.add("done"));}step=(step+1)%4;return}
+    if(step<9){const i=Math.floor(step/3),j=step%3;[...a,...b].forEach(x=>x.className="");c.forEach((x,n)=>{x.className=n<step?"done":""});cell(i,j,"on");
+      out.textContent=`C[${i+1},${j+1}] = ${A[i].map((v,k)=>v+"×"+B[k][j]).join(" + ")} = ${C[i][j]}`}
+    else{clear();c.forEach(x=>x.classList.add("done"));out.textContent="9 cells, one after another: 9 steps"}
+    step=(step+1)%11}
+  function start(){clearInterval(timer);step=0;clear();if(reduce){c.forEach(x=>x.classList.add("done"));out.textContent="C = A × B";return}tick();timer=setInterval(tick,mode()==="gpu"?1100:950)}
+  start()})();
+
+/* ---------- M2 training calc ---------- */
+function trainCalc(){const N=logScale(+$("#tN").value,1e8,1e12),D=logScale(+$("#tD").value,1e9,2e13);const [tf,price]=$("#tG").value.split("|").map(Number);const u=+$("#tU").value/100;const G=Math.pow(2,+$("#tC").value);
+  $("#tNo").textContent=fmtNum(N);$("#tDo").textContent=fmtNum(D);$("#tUo").textContent=Math.round(u*100)+"%";$("#tCo").textContent=G.toLocaleString();
+  const F=6*N*D,sec=F/(tf*1e12*u*G),h=sec/3600;$("#tF").textContent=sci(F);$("#tT").textContent=fmtTime(h);$("#tCost").textContent=money(h*G*price);$("#tGH").textContent=fmtNum(h*G)}
+["tN","tD","tG","tU","tC"].forEach(i=>$("#"+i).addEventListener("input",trainCalc));trainCalc();
+
+/* ---------- M2 memory calc ---------- */
+const mP=seg("mP",memCalc),mMode=seg("mMode",memCalc);
+function memCalc(){const N=logScale(+$("#mN").value,1e8,2e11);const b=+mP();const train=mMode()==="train";const B=Math.pow(2,+$("#mB").value);const S=+$("#mS").value;const V=+$("#mV").value;
+  $("#mNo").textContent=fmtNum(N);$("#mBo").textContent=B;
+  const L=Math.max(2,Math.round(Math.cbrt(N/196608))),h=128*L; /* standard transformer shape: N ≈ 12 L h², h ≈ 128 L */
+  const p=N*b/1e9;let parts;
+  if(train){const act=34*S*B*h*L/1e9;parts=[["Weights",p,"#BFE0B1"],["Gradients",p,"#F8CFA4"],["Optimizer states",2*p,"#F2B8B5"],["Activations",act,"#B9DCE6"]]}
+  else{const kv=2*L*h*S*B*2/1e9,tmp=4*S*B*h*2/1e9;parts=[["Weights",p,"#BFE0B1"],["KV cache",kv,"#D7C9F4"],["Temporary activations",tmp,"#B9DCE6"]]}
+  const tot=parts.reduce((s,x)=>s+x[1],0);const scale=Math.max(tot,V)*1.05;
+  $("#mStack").innerHTML=parts.map(([n,v,c])=>`<span style="width:${v/scale*100}%;background:${c}" title="${n}: ${v.toFixed(1)} GB">${v/scale>0.1?n:""}</span>`).join("")+`<i class="limit" data-l="${V} GB GPU" style="left:${V/scale*100}%"></i>`;
+  $("#mParts").innerHTML=parts.map(([n,v,c])=>`<div style="border-left:5px solid ${c}"><small>${n}</small><strong>${v<0.1?v.toFixed(2):v.toFixed(1)} GB</strong></div>`).join("")+`<div><small>Total needed</small><strong>${tot.toFixed(1)} GB</strong></div>`;
+  const vd=$("#mVerdict");
+  if(tot<=V){vd.className="verdict ok";vd.textContent="It fits. Ben's backpack closes with "+(V-tot).toFixed(1)+" GB to spare."}else{vd.className="verdict bad";vd.textContent="It doesn't fit: "+(tot-V).toFixed(1)+" GB over. Try a smaller batch size, a shorter sequence, lower precision, or the tricks in Modules 4 and 5."}}
+["mN","mB","mS","mV"].forEach(i=>$("#"+i).addEventListener("input",memCalc));memCalc();
+
+/* ---------- M3 attention question ---------- */
+(function(){const opts=["Compute-bound","Memory-bound","Memory-bandwidth-bound","Communication-bound"];const box=$("#attnQ");
+  box.innerHTML=opts.map((o,i)=>`<button class="opt" data-i="${i}"><span class="L">${"ABCD"[i]}</span>${o}</button>`).join("");
+  box.addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b)return;box.querySelectorAll(".opt").forEach(x=>{x.classList.remove("right","wrong","fade");x.classList.add(+x.dataset.i===2?"right":"fade")});if(+b.dataset.i!==2)b.classList.replace("fade","wrong");
+    const o=$("#attnOut");o.hidden=false;o.innerHTML="<b>💡 C: memory-bandwidth-bound.</b>Attention builds a large table of scores that doesn't fit in the GPU's fast on-chip memory, so it is written to and read from slower HBM several times. The maths on that table is light, so the cores mostly wait for data. Keep reading to see why.";})})();
+
+/* ---------- M3 attention grid ---------- */
+function attnCalc(){const n=Math.pow(2,+$("#aN").value);$("#aNo").textContent=n.toLocaleString();const cells=n*n;$("#aCells").textContent=fmtNum(cells);$("#aMem").textContent=fmtBytes(cells*2);$("#aAll").textContent=fmtBytes(cells*2*32*32);
+  const k=Math.min(32,Math.max(4,Math.round(4*Math.pow(2,(+$("#aN").value-7)/2.6))));const g=$("#aGrid");g.style.gridTemplateColumns=`repeat(${k},1fr)`;g.innerHTML="<i></i>".repeat(k*k)}
+$("#aN").addEventListener("input",attnCalc);attnCalc();
+
+/* ---------- M3 flash animation ---------- */
+const fMode=seg("fMode",()=>resetFlash());const fGrid=$("#fGrid");fGrid.innerHTML="<i></i>".repeat(64);let fTimer=null;
+function resetFlash(){clearInterval(fTimer);fGrid.querySelectorAll("i").forEach(c=>c.className="");$("#fW").textContent="0";$("#fR").textContent="0";
+  $("#fNote").textContent=fMode()==="std"?"Standard attention writes the whole score table to HBM, then reads it back for softmax and again to multiply by V.":"FlashAttention loads small tiles of Q, K and V into SRAM, finishes the softmax and the multiply there, and only writes the final output. The score table never reaches HBM."}
+$("#fPlay").addEventListener("click",()=>{resetFlash();const cells=[...fGrid.querySelectorAll("i")];let step=0;const flash=fMode()==="flash";
+  if(flash){const tiles=[];for(let bi=0;bi<4;bi++)for(let bj=0;bj<4;bj++)tiles.push([bi,bj]);
+    fTimer=setInterval(()=>{cells.forEach(c=>c.classList.remove("hot"));if(step>=tiles.length){clearInterval(fTimer);return}const [bi,bj]=tiles[step];for(let a=0;a<2;a++)for(let b=0;b<2;b++){const c=cells[(bi*2+a)*8+bj*2+b];c.classList.add("hot","done")}step++},reduce?60:380)}
+  else{let w=0,r=0;fTimer=setInterval(()=>{if(step<64){cells[step].classList.add("hot");w++;$("#fW").textContent=w}else if(step<192){const idx=(step-64)%64;cells.forEach(c=>c.classList.remove("hot"));cells[idx].classList.add("hot");r++;$("#fR").textContent=r}else{cells.forEach(c=>{c.classList.remove("hot");c.classList.add("done")});clearInterval(fTimer)}step++},reduce?5:28)}});
+resetFlash();
+
+/* ---------- M4 quantization ---------- */
+function quantCalc(){const N=logScale(+$("#qN").value,1e8,4e11);const V=+$("#qV").value;$("#qNo").textContent=fmtNum(N);
+  const rows=[["float32",4],["bfloat16",2],["int8",1],["int4",0.5]];const max=Math.max(N*4/1e9,V)*1.05;
+  $("#qBars").innerHTML=rows.map(([n,b])=>{const gb=N*b/1e9;const fit=gb<=V;return `<div style="display:grid;grid-template-columns:90px minmax(0,1fr) 110px;gap:10px;align-items:center"><b style="font-size:14px">${n}</b><div class="stack" style="height:30px"><span style="width:${gb/max*100}%;background:${fit?"#BFE0B1":"#F2B8B5"}"></span><i class="limit" data-l="" style="left:${V/max*100}%"></i></div><span class="mono" style="font-size:14px">${gb.toFixed(1)} GB ${fit?"✓":"✗"}</span></div>`}).join("")}
+["qN","qV"].forEach(i=>$("#"+i).addEventListener("input",quantCalc));quantCalc();
+
+/* ---------- M4 bf16 rounding ---------- */
+const f32=new Float32Array(1),u32=new Uint32Array(f32.buffer);
+function toBf16(v){f32[0]=v;let x=u32[0];const lsb=(x>>16)&1;x=(x+0x7FFF+lsb)&0xFFFF0000;u32[0]=x>>>0;return f32[0]}
+function mpCalc(){const w=+$("#mpW").value,u=+$("#mpU").value;f32[0]=w+u;const r32=f32[0];const r16=toBf16(toBf16(w)+toBf16(u));
+  $("#mp32").textContent=r32.toPrecision(7);$("#mp16").textContent=r16.toPrecision(7);const v=$("#mpV");const lost=toBf16(w)===r16&&u!==0;
+  if(lost){v.className="verdict bad";v.textContent="In bfloat16 the update vanished: "+w+" + "+u+" rounds back to "+r16+". Do this for every weight and the model stops learning."}else{v.className="verdict ok";v.textContent="The update survived in both formats here. Try a smaller update, like 0.001 on a weight of 1."}}
+["mpW","mpU"].forEach(i=>$("#"+i).addEventListener("input",mpCalc));mpCalc();
+
+/* ---------- M4 gradient accumulation ---------- */
+let ga=0;function gaPaint(){$("#gaSteps").innerHTML=[1,2,3,4].map(i=>`<div class="tile ${i<=ga?"t-blue":""}" style="text-align:center"><h4 style="margin:0">Micro-batch ${i}</h4><p>16 examples${i<=ga?"<br>gradients added":""}</p></div>`).join("");
+  $("#gaBar").style.width=(ga/4*100)+"%";$("#gaBar").textContent=ga?ga*16+" examples":"";const b=$("#gaNext"),v=$("#gaV");
+  if(ga<4){b.textContent="Run micro-batch "+(ga+1);v.className="verdict mid";v.textContent=ga?"Gradients from "+ga*16+" examples added. Still no update.":"Each micro-batch computes gradients but doesn't update the weights yet."}
+  else if(ga===4){b.textContent="Update the weights";v.className="verdict mid";v.textContent="All 64 examples processed with only 16 in memory at a time. Now update once."}
+  else{b.textContent="Done";b.disabled=true;v.className="verdict ok";v.textContent="Weights updated once, exactly as if you had used a batch of 64. It took 4 forward and backward passes."}}
+$("#gaNext").addEventListener("click",()=>{if(ga<5)ga++;gaPaint()});$("#gaReset").addEventListener("click",()=>{ga=0;$("#gaNext").disabled=false;gaPaint()});gaPaint();
+
+/* ---------- M5 ring ---------- */
+function ringCalc(){const G=+$("#rG").value,P=logScale(+$("#rP").value,1e8,4e11);$("#rGo").textContent=G;$("#rPo").textContent=fmtNum(P);
+  const M=P*2,S=2*(G-1)/G*M;$("#rM").textContent=fmtBytes(M);$("#rS").textContent=fmtBytes(S);$("#rT").textContent=(S/900e9*1000).toFixed(S/900e9<0.1?1:0)+" ms";
+  const R=120,cx=160,cy=150;let s=`<svg viewBox="0 0 320 300" role="img" aria-label="${G} GPUs arranged in a ring, each passing gradient chunks to the next">`;
+  for(let i=0;i<G;i++){const a1=i/G*2*Math.PI-Math.PI/2,a2=(i+1)/G*2*Math.PI-Math.PI/2;const x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1),x2=cx+R*Math.cos(a2),y2=cy+R*Math.sin(a2);
+    s+=`<path d="M${x1} ${y1} A${R} ${R} 0 0 1 ${x2} ${y2}" fill="none" stroke="var(--eq-teal)" stroke-width="2.5" stroke-dasharray="6 5"><animate attributeName="stroke-dashoffset" from="22" to="0" dur="1s" repeatCount="${reduce?0:"indefinite"}"/></path>`}
+  for(let i=0;i<G;i++){const a=i/G*2*Math.PI-Math.PI/2,x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);s+=`<g><rect x="${x-17}" y="${y-13}" width="34" height="26" rx="7" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/><text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue-ink)">GPU${i+1}</text></g>`}
+  s+=`<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">each GPU passes</text><text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="13" fill="var(--muted)">chunks to its neighbour</text></svg>`;$("#ringSvg").innerHTML=s}
+["rG","rP"].forEach(i=>$("#"+i).addEventListener("input",ringCalc));ringCalc();
+
+/* ---------- M5 ZeRO ---------- */
+function zeroCalc(){const P=logScale(+$("#zP").value,1e8,2e12),G=+$("#zG").value;$("#zPo").textContent=fmtNum(P);$("#zGo").textContent=G;
+  const st=[["No sharding",16],["ZeRO-1",4+12/G],["ZeRO-2",2+14/G],["ZeRO-3 / FSDP",16/G]];const max=16*P/1e9;
+  $("#zBars").innerHTML=st.map(([n,bpp])=>{const gb=bpp*P/1e9;const fit=gb<=80;return `<div style="display:grid;grid-template-columns:120px minmax(0,1fr) 120px;gap:10px;align-items:center"><b style="font-size:14px">${n}</b><div class="stack" style="height:28px"><span style="width:${Math.max(gb/max*100,0.6)}%;background:${fit?"#BFE0B1":"#F2B8B5"}"></span></div><span class="mono" style="font-size:14px">${fmtBytes(gb*1e9)} ${fit?"✓":"✗"}</span></div>`}).join("")+`<p class="hint" style="margin:2px 0 0">✓ fits on one 80 GB GPU, before activations.</p>`}
+["zP","zG"].forEach(i=>$("#"+i).addEventListener("input",zeroCalc));zeroCalc();
+
+/* ---------- M5 tensor parallel diagram ---------- */
+(function(){const m=(r,c,col)=>`<span class="mat" style="grid-template-columns:repeat(${c},20px)">${`<i style="background:${col}"></i>`.repeat(r*c)}</span>`;
+  const A="var(--blue-soft)",B="#BFE0B1",C="#D7C9F4",X="var(--surface-2)";
+  $("#tpDiagram").innerHTML=`<div style="display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:center;min-width:560px">
+  <b>GPU 1</b><div class="row">${m(2,4,X)} <span>×</span> ${m(4,2,B)} <span>=</span> ${m(2,2,B)} <span class="muted">→ MLP ×</span> ${m(2,4,C)} <span>=</span> ${m(2,4,C)} <span class="muted">partial sum</span></div>
+  <b>GPU 2</b><div class="row">${m(2,4,X)} <span>×</span> ${m(4,2,"#F8CFA4")} <span>=</span> ${m(2,2,"#F8CFA4")} <span class="muted">→ MLP ×</span> ${m(2,4,"#F2C6C3")} <span>=</span> ${m(2,4,"#F2C6C3")} <span class="muted">partial sum</span></div>
+  <span></span><div class="verdict mid" style="margin:0">All-reduce: add the two partial sums → the same output as one big GPU</div></div>
+  <p class="figcap">The input X (grey) is copied to both GPUs. The first weight matrix is split by columns (green on GPU 1, orange on GPU 2), the second by rows, so each GPU finishes its half before one all-reduce.</p>`})();
+
+/* ---------- M5 pipeline ---------- */
+function pipeCalc(){const p=+$("#pS").value,m=+$("#pM").value;$("#pSo").textContent=p;$("#pMo").textContent=m;const T=2*(m+p-1);const grid=[];
+  for(let s=0;s<p;s++){const row=new Array(T).fill(null);for(let i=0;i<m;i++){row[s+i]=["f",i+1];row[(m+p-1)+(p-1-s)+i]=["b",i+1]}grid.push(row)}
+  const g=$("#gantt");g.style.gridTemplateColumns=`70px repeat(${T},minmax(22px,1fr))`;
+  g.innerHTML=grid.map((row,s)=>`<div class="lbl">GPU ${s+1}</div>`+row.map(c=>c?`<div class="c ${c[0]}">${c[0].toUpperCase()}${c[1]}</div>`:`<div class="c e"></div>`).join("")).join("");
+  const bub=(p-1)/(m+p-1);$("#pV").textContent=`Bubble: ${(bub*100).toFixed(0)}% of the time each GPU sits idle. ${m<4*p?"Add more micro-batches to shrink it.":"Plenty of micro-batches: the bubble is small."}`}
+["pS","pM"].forEach(i=>$("#"+i).addEventListener("input",pipeCalc));pipeCalc();
+
+/* ---------- M5 strategy check ---------- */
+(function(){const qs=[["A 1B model fits on one GPU, but training would take 6 months.",0],["A 70B model: you put layers 1 to 40 on GPU 1 and layers 41 to 80 on GPU 2.",2],["Each layer's matrix multiplication is split across the 8 GPUs inside one machine.",1]];
+  const names=["Data parallelism","Tensor parallelism","Pipeline parallelism"];const el=$("#stratQ");
+  el.innerHTML=qs.map(([q],k)=>`<div style="margin-bottom:16px"><p style="font-weight:600;margin-bottom:8px">${k+1}. ${q}</p><div class="row" data-k="${k}">${names.map((n,i)=>`<button class="opt" style="padding:7px 16px 7px 7px;font-size:15px" data-i="${i}"><span class="L" style="width:28px;height:28px">${"ABC"[i]}</span>${n}</button>`).join("")}</div></div>`).join("");
+  el.addEventListener("click",e=>{const b=e.target.closest(".opt");if(!b)return;const r=b.parentElement,k=+r.dataset.k;r.querySelectorAll(".opt").forEach(x=>{x.classList.remove("right","wrong","fade");x.classList.add(+x.dataset.i===qs[k][1]?"right":"fade")});if(+b.dataset.i!==qs[k][1])b.classList.replace("fade","wrong")})})();
+
+/* ---------- M6 decode ---------- */
+const dP=seg("dP",decCalc);
+function decCalc(){const N=logScale(+$("#dN").value,1e9,4e11);const b=+dP();const bw=+$("#dG").value*1e9;const B=Math.pow(2,+$("#dB").value);
+  $("#dNo").textContent=fmtNum(N);$("#dBo").textContent=B;const bytes=N*b;const tps=bw/bytes;$("#dW").textContent=fmtBytes(bytes);$("#dU").textContent=tps.toFixed(tps<10?1:0)+" tok/s";$("#dT").textContent=Math.round(tps*B).toLocaleString()+" tok/s"}
+["dN","dG","dB"].forEach(i=>$("#"+i).addEventListener("input",decCalc));decCalc();
+
+/* ---------- M6 KV cache ---------- */
+const kM=seg("kM",kvCalc);
+function kvCalc(){const kv=kM()==="mha"?32:8;const S=Math.pow(2,+$("#kS").value),B=Math.pow(2,+$("#kB").value);$("#kSo").textContent=S.toLocaleString();$("#kBo").textContent=B;
+  const per=2*32*kv*128*2;$("#kTok").textContent=fmtBytes(per);$("#kSeq").textContent=fmtBytes(per*S);const all=per*S*B;$("#kAll").textContent=fmtBytes(all);
+  const free=80e9-16e9;const v=$("#kV");if(all<=free){v.className="verdict ok";v.textContent="Fits next to the ~16 GB of bfloat16 weights on one 80 GB GPU."}else{v.className="verdict bad";v.textContent="Too big: the KV cache needs "+fmtBytes(all)+" but only about "+fmtBytes(free)+" is left after the weights on an 80 GB GPU."}}
+["kS","kB"].forEach(i=>$("#"+i).addEventListener("input",kvCalc));kvCalc();
+
+/* ---------- slides viewer ---------- */
+const slides=JSON.parse($("#slidesData").textContent),titles=JSON.parse($("#titlesData").textContent);let curSlide=0;
+$("#thumbs").innerHTML=slides.map((s,i)=>`<button data-s="${i}" aria-label="Slide ${i+1}: ${titles[i].replace(/"/g,"&quot;")}"><img src="${s}" alt="" loading="lazy"><span>${i+1}. ${titles[i]}</span></button>`).join("");
+function showSlide(i){curSlide=Math.max(0,Math.min(slides.length-1,i));$("#slideImg").src=slides[curSlide];$("#slideImg").alt="Slide "+(curSlide+1)+": "+titles[curSlide];$("#sCount").textContent="Slide "+(curSlide+1)+" of "+slides.length;
+  $$("#thumbs button").forEach(b=>b.setAttribute("aria-current",+b.dataset.s===curSlide));const t=$(`#thumbs button[data-s="${curSlide}"]`);if(t)t.scrollIntoView({block:"nearest",inline:"center",behavior:reduce?"auto":"smooth"})}
+$("#thumbs").addEventListener("click",e=>{const b=e.target.closest("button");if(b)showSlide(+b.dataset.s)});$("#sPrev").addEventListener("click",()=>showSlide(curSlide-1));$("#sNext").addEventListener("click",()=>showSlide(curSlide+1));
+addEventListener("keydown",e=>{if(!$('[data-view="slides"]').classList.contains("on"))return;if(e.key==="ArrowRight")showSlide(curSlide+1);if(e.key==="ArrowLeft")showSlide(curSlide-1)});
+
+/* ---------- downloads ---------- */
+let dl=null;try{window.claude&&window.claude.use&&window.claude.use("downloads").then(d=>{dl=d;if(!d)$$("[data-dl]").forEach(b=>b.hidden=true)})}catch(e){}
+const DL_URLS={slides:"assets/downloads/GPUs_and_Inference_Engineering_Slides.pdf",worksheet:"assets/downloads/GPUs_and_Model_Acceleration_Worksheet.pdf"};
+if(!(window.claude&&window.claude.use))$$("[data-dl]").forEach(b=>{const u=DL_URLS[b.dataset.dl];if(u){b.addEventListener("click",()=>{const a=document.createElement("a");a.href=u;a.download="";document.body.appendChild(a);a.click();a.remove()})}else b.hidden=true});
+function b64ToBlob(id){const s=$(id).textContent.trim();const bin=atob(s);const a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a])}
+$$("[data-dl]").forEach(b=>b.addEventListener("click",async()=>{if(!dl)return;const which=b.dataset.dl;const old=b.textContent;
+  try{await dl.save(which==="slides"?{filename:"GPUs_and_Inference_Engineering_Slides.pdf",data:b64ToBlob("#pdfSlides")}:{filename:"GPUs_and_Model_Acceleration_Worksheet.pdf",data:b64ToBlob("#pdfWs")});b.textContent="Saved"}
+  catch(err){b.textContent=err&&err.code==="declined"?old:"Download unavailable here"}setTimeout(()=>b.textContent=old,2500)}));
+
+/* ---------- quiz ---------- */
+const Q=[
+["Why are GPUs particularly well suited for modern AI?",["Clock speed","Parallel processing","Larger memory","Higher bandwidth"],1,"Modern AI is mostly large matrix multiplications that split into many small, independent calculations. GPUs have thousands of cores that run them at the same time."],
+["If both the number of parameters and the number of training tokens double, the estimated training FLOPs become:",["2× larger","4× larger","6× larger","8× larger"],1,"FLOPs = 6 × N × D, so 6 × 2N × 2D is 4 times the original. The 6 is a constant."],
+["Three LLMs train on one 600 TFLOPS GPU. A: 7B params, 1T tokens. B: 13B, 300B. C: 3B, 2T. Which takes longest?",["Model A","Model B","Model C","All the same"],0,"Time depends on N × D. A needs 4.2 × 10²² FLOPs (about 810 days), more than C (3.6 × 10²²) or B (2.34 × 10²²)."],
+["How does bfloat16 improve on float32 for deep learning?",["It is more precise","Smaller mantissa, same exponent size","Smaller exponent, same mantissa size","Same precision and range, less memory"],1,"bfloat16 keeps float32's 8 exponent bits, so it covers the same range, but cuts the mantissa from 23 to 7 bits, halving memory at some cost in precision."],
+["Which does NOT change how much GPU memory training needs?",["Batch size","Number of parameters","Sequence length","Total training tokens in the dataset"],3,"Memory per step depends on parameters (weights, gradients, optimizer) and on batch size and sequence length (activations). Dataset size only changes how long training takes."],
+["A 24 GB GPU, parameter memory only, bfloat16. P: 7B, Q: 13B, R: 11B. Which will NOT fit?",["Q only","Q and R","P and Q","All fit"],0,"At 2 bytes per parameter, P needs 14 GB and R needs 22 GB, so both fit. Q needs 26 GB."],
+["What is the main way FlashAttention fixes Attention's memory-bandwidth bottleneck?",["It approximates attention with fewer calculations","It processes tiles in fast on-chip SRAM, so the full table never goes to HBM","It adds more HBM","It stores the table in int4"],1,"The table is too big for SRAM, so standard attention moves it to and from HBM repeatedly. FlashAttention finishes each tile inside SRAM, computing exact attention with far fewer HBM reads and writes."],
+["What is the main trade-off of gradient accumulation?",["Higher memory use","Lower accuracy","Longer training time","More parameters"],2,"Each update needs several smaller forward and backward passes, so training takes longer. Memory drops and accuracy stays the same."],
+["Why are master weights kept in float32 in mixed-precision training?",["To reduce memory","For numerical stability","To enable kernel fusion","To compute faster"],1,"Updates are tiny and can round away in 16-bit (1.00 + 0.0001 = 1.00). Float32 master weights keep them."],
+["A 70B model in bfloat16 is quantized to int4. Parameter memory, and does it fit on one 80 GB GPU?",["35 GB, fits","70 GB, fits","140 GB, does not fit","17.5 GB, fits"],0,"int4 is 0.5 bytes per parameter: 70B × 0.5 = 35 GB, down from 140 GB. That fits in 80 GB."],
+["A 70B model doesn't fit on one GPU. You put layers 1 to 40 on GPU 1 and 41 to 80 on GPU 2. What is this?",["Data parallelism","Tensor parallelism","Pipeline parallelism","Gradient accumulation"],2,"Splitting consecutive layers into stages is pipeline parallelism. Micro-batches reduce the idle bubble."],
+["Why is decoding (generating one token at a time) usually memory-bandwidth-bound?",["It uses more FLOPs than prefill","Each token reads every weight and the KV cache for very little maths","The GPU runs out of memory","Tokens are sent between GPUs"],1,"For each new token, all weights and the KV cache stream from HBM, but the maths per byte is tiny. That is why quantization and batching speed decode up."]];
+let qi=0,ans=store.get("gpu-ben-quiz",[]);
+function quizPaint(){const c=$("#quizCard");if(qi>=Q.length){const sc=ans.filter((a,i)=>a===Q[i][2]).length;
+    c.innerHTML=`<div class="ben" style="margin:0"><div class="stage"><img src="assets/img/ben_fire.webp" alt="Ben celebrating"></div><div class="say"><p style="font-size:20px"><b>You scored ${sc} out of ${Q.length}.</b></p><p class="muted" style="margin-top:6px">${sc===Q.length?"Perfect. You're ready to plan real GPU runs.":sc>=8?"Strong work. Revisit the modules for the ones you missed.":"Good start. The modules and calculators will help these ideas click."}</p></div></div><div class="row" style="margin-top:18px"><button class="btn" id="qAgain">Try again</button><a class="btn ghost" href="#worksheet">Go to the worksheet</a></div>`;
+    $("#qAgain").onclick=()=>{qi=0;ans=[];store.set("gpu-ben-quiz",ans);quizPaint()};return}
+  const [q,o,r,ex]=Q[qi];const a=ans[qi];
+  c.innerHTML=`<div class="q-top"><span class="pill">Question ${qi+1} of ${Q.length}</span><div class="score-dots">${Q.map((x,i)=>`<i class="${ans[i]===undefined?"":ans[i]===x[2]?"r":"w"} ${i===qi?"cur":""}"></i>`).join("")}</div></div>
+  <p class="q-text">${q}</p><div class="opts">${o.map((t,i)=>`<button class="opt ${a===undefined?"":i===r?"right":i===a?"wrong":"fade"}" data-i="${i}" ${a!==undefined?"disabled":""}><span class="L">${"ABCD"[i]}</span>${t}</button>`).join("")}</div>
+  ${a!==undefined?`<div class="explain"><b>💡 ${a===r?"Correct!":"Not quite. The answer is "+"ABCD"[r]+"."}</b>${ex}</div>`:""}
+  <div class="row" style="margin-top:18px;justify-content:space-between"><button class="btn ghost" id="qPrev" ${qi===0?"disabled":""}>Previous</button><button class="btn" id="qNext" ${a===undefined?"disabled":""}>${qi===Q.length-1?"See my score":"Next question"}</button></div>`;
+  c.querySelectorAll(".opt").forEach(b=>b.onclick=()=>{ans[qi]=+b.dataset.i;store.set("gpu-ben-quiz",ans);quizPaint()});$("#qPrev").onclick=()=>{qi--;quizPaint()};$("#qNext").onclick=()=>{qi++;quizPaint()}}
+quizPaint();
+
+/* ---------- worksheet ---------- */
+const WS=[
+ {t:"1. Which GPUs can train your model?",p:"Calculate the training memory in GB.",f:[["Parameters",2],["Gradients",2],["Optimizer (Adam)",4],["Activations",12],["Total",20]],r:"Which part of training memory would shrink if you halved the batch size, and which parts would not?",
+  x:"Parameters: 1B × 2 bytes = 2 GB. Gradients: same as the weights, 2 GB. Adam: 2 states × 2 GB = 4 GB. Activations: 12 GB. Total 20 GB, so it doesn't fit on GPU A (16 GB) as is, but fits on B and C."},
+ {t:"2. What would each option cost, and how long would it take?",p:"Use one GPU of each type. Enter compute in units of 10²⁰ FLOPs, time in hours and cost in dollars.",f:[["Compute (× 10²⁰ FLOPs)",1.2],["Time on A (h)",333.3],["Time on B (h)",111.1],["Time on C (h)",33.3],["Cost on A ($)",333.3],["Cost on B ($)",444.4],["Cost on C ($)",333.3]],r:"Why isn't the cheapest GPU per hour necessarily the cheapest training option? What matters more for total cost: GPU price or training time?",
+  x:"6 × 10⁹ × 2 × 10¹⁰ = 1.2 × 10²⁰ FLOPs. A: 1.2 × 10²⁰ ÷ 10¹⁴ = 1.2 × 10⁶ s ≈ 333 h, $333. B: 111 h, $444. C: 33 h, $333. Only C meets the 72-hour deadline and the $1,000 budget on a single GPU."},
+ {t:"4. How much memory does inference need?",p:"No gradients or optimizer states. Temporary activations: 1 GB. int4 uses 0.5 bytes per parameter.",f:[["bf16 total (GB)",3],["int4 total (GB)",1.5],["Training ÷ bf16 (×)",6.7],["Training ÷ int4 (×)",13.3]],r:"What might you sacrifice by choosing the lowest-precision option (int4) for inference?",
+  x:"bf16: 2 GB weights + 1 GB activations = 3 GB, about 7× less than training. int4: 0.5 + 1 = 1.5 GB, about 13× less. Both fit easily on GPU A, the cheapest option for serving."}];
+function wsField(k,j,[n,v]){return `<div class="ws-in"><label for="ws${k}_${j}">${n}</label><input type="number" step="any" id="ws${k}_${j}" data-ans="${v}"></div>`}
+function wsBlock(q,k){return `<div class="card ws-q"><h3 style="margin-top:0">${q.t}</h3><p class="muted">${q.p}</p><div class="ws-row">${q.f.map((f,j)=>wsField(k,j,f)).join("")}</div>
+  <div class="row" style="margin-top:14px"><button class="btn" data-check="${k}">Check my answers</button><button class="btn ghost" data-show="${k}">Show the working</button></div><div class="explain" id="wsx${k}" hidden><b>💡 Working</b>${q.x}</div><div class="reflect"><b>💡 Reflect</b><br>${q.r}</div></div>`}
+$("#wsBody").innerHTML=wsBlock(WS[0],0)+wsBlock(WS[1],1)+`<div class="card ws-q"><h3 style="margin-top:0">3. What is your final training plan?</h3><p class="muted">Build a plan and see whether it meets the deadline and budget. Each GPU in a data-parallel plan holds the full model, and the batch is split between GPUs.</p>
+  <div class="ctl"><div><label for="plG">GPU type</label><select id="plG"><option value="16|100|1">A (16 GB, 100 TFLOPS, $1/h)</option><option value="40|300|4">B (40 GB, 300 TFLOPS, $4/h)</option><option value="80|1000|10">C (80 GB, 1,000 TFLOPS, $10/h)</option></select></div><div><label for="plN">How many GPUs <output id="plNo"></output></label><input type="range" id="plN" min="1" max="8" value="1"></div>
+  <div><label>Options</label><label style="font-weight:500;color:var(--ink)"><input type="checkbox" id="plGA"> Gradient accumulation (4 steps)</label><label style="font-weight:500;color:var(--ink)"><input type="checkbox" id="plE"> Realistic scaling (80% efficiency)</label></div></div>
+  <div class="readout"><div><small>Memory per GPU</small><strong id="plMem"></strong></div><div><small>Training time</small><strong id="plT"></strong></div><div><small>Total cost</small><strong id="plC"></strong></div></div><div class="verdict" id="plV"></div>
+  <div class="reflect"><b>💡 Reflect</b><br>What trade-off did you make to meet both the deadline and budget? Why do you think the trade-off makes sense?</div></div>`+wsBlock(WS[2],2);
+$("#wsBody").addEventListener("click",e=>{const c=e.target.closest("[data-check]");if(c){const k=+c.dataset.check;let all=true;$$(`#wsBody input[id^="ws${k}_"]`).forEach(i=>{const a=+i.dataset.ans,v=parseFloat(i.value);const ok=!isNaN(v)&&Math.abs(v-a)<=Math.max(0.05*a,0.06);i.classList.toggle("ok",ok);i.classList.toggle("no",!ok);if(!ok)all=false});c.textContent=all?"All correct!":"Check again";setTimeout(()=>c.textContent="Check my answers",2200)}
+  const s=e.target.closest("[data-show]");if(s){const x=$("#wsx"+s.dataset.show);x.hidden=!x.hidden}});
+function plan(){const [vram,tf,price]=$("#plG").value.split("|").map(Number);const n=+$("#plN").value;const ga=$("#plGA").checked,eff=$("#plE").checked?0.8:1;$("#plNo").textContent=n;
+  const act=12/n/(ga?4:1);const mem=8+act;const h=1.2e20/(tf*1e12*n*eff)/3600;const cost=h*n*price;$("#plMem").textContent=mem.toFixed(1)+" GB";$("#plT").textContent=h.toFixed(1)+" h";$("#plC").textContent="$"+Math.round(cost);
+  const fits=mem<=vram,dl=h<=72,bud=cost<=1000;const v=$("#plV");v.className="verdict "+(fits&&dl&&bud?"ok":"bad");
+  v.textContent=!fits?"Doesn't fit: "+mem.toFixed(1)+" GB per GPU is more than "+vram+" GB. Add GPUs or gradient accumulation.":(dl&&bud)?"This plan fits, meets the 72-hour deadline and stays within $1,000.":(!dl&&!bud)?"Misses both the deadline and the budget.":!dl?"Fits and is within budget, but misses the 72-hour deadline.":"Meets the deadline, but goes over the $1,000 budget."}
+["plG","plN","plGA","plE"].forEach(i=>$("#"+i).addEventListener("input",plan));plan();
+
+/* ---------- resources ---------- */
+const ext=[["Modal GPU Glossary","A clear, illustrated glossary of GPU hardware and software terms.","https://modal.com/gpu-glossary","t-blue"],
+["Inside an AI Data Center","An interactive tour of what it takes to power AI at gigawatt scale.","https://kiankyars.github.io/gigawatt","t-peach"],
+["Inference Engineering by Philip Kiely","A practical book on making LLMs fast and affordable to serve.","https://www.baseten.co/inference-engineering/","t-sage"],
+["Inference Engineering: interactive exercises","Hands-on exercises to accompany the book.","https://inferenceengineering.tech/exercises/","t-lav"],
+["NVIDIA GPU Programming Guide","NVIDIA's guide to how GPUs execute work and how to program them.","https://developer.nvidia.com/nvidia-gpu-programming-guide","t-sage"],
+["AIMS GCP Tutorial","Step-by-step guide to running your work on Google Cloud GPUs.","https://rexsimiloluwah.github.io/gcp-tutorial-aims/","t-blue"]];
+$("#extLinks").innerHTML=ext.map(([t,d,u,c])=>`<a href="${u}" target="_blank" rel="noopener"><span class="ic ${c}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span><span><h4>${t}</h4><p>${d}</p><span class="url">${u.replace(/^https?:\/\//,"")}</span></span></a>`).join("");
+const papers=[["Scaling Laws for Neural Language Models","Kaplan et al., 2020","2001.08361"],["Training Compute-Optimal Large Language Models (Chinchilla)","Hoffmann et al., 2022","2203.15556"],["Mixed Precision Training","Micikevicius et al., 2017","1710.03740"],["FlashAttention","Dao et al., 2022","2205.14135"],["Megatron-LM: Training Multi-Billion Parameter Models Using Model Parallelism","Shoeybi et al., 2019","1909.08053"],["GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism","Huang et al., 2018","1811.06965"],["ZeRO: Memory Optimizations Toward Training Trillion Parameter Models","Rajbhandari et al., 2019","1910.02054"],["Efficient Memory Management for LLM Serving with PagedAttention (vLLM)","Kwon et al., 2023","2309.06180"],["Fast Inference from Transformers via Speculative Decoding","Leviathan et al., 2022","2211.17192"],["LoRA: Low-Rank Adaptation of Large Language Models","Hu et al., 2021","2106.09685"],["QLoRA: Efficient Finetuning of Quantized LLMs","Dettmers et al., 2023","2305.14314"]];
+$("#papers").innerHTML=papers.map(([t,a,id])=>`<li><a href="https://arxiv.org/abs/${id}" target="_blank" rel="noopener">${t}</a> <span class="muted">${a}</span></li>`).join("");
+
+/* ---------- per-page table of contents ---------- */
+const tocData={};
+views.forEach(v=>{const hs=[...v.querySelectorAll("h2, h3")].filter(h=>!h.closest(".widget-h,.tile,.feature,.ben,.journey,.res")&&(h.tagName==="H2"||h.parentElement===v||h.closest(".ws-q")));
+  const top=hs.filter(h=>h.tagName==="H2"||h.closest(".ws-q"));if(top.length<2)return;
+  hs.forEach((h,i)=>{if(!h.id)h.id=v.dataset.view+"-s"+i});tocData[v.dataset.view]=hs.map(h=>({id:h.id,lvl:(h.tagName==="H2"||h.closest(".ws-q"))?"h2":"h3",txt:h.textContent.trim()}))});
+let tocItems=null;const railClosed=store.get("gpu-ben-rail-closed",false);
+if(railClosed){$("#tocRail").classList.add("closed");$("#tocToggle").textContent="Show";$("#tocToggle").setAttribute("aria-expanded","false")}
+$("#tocToggle").addEventListener("click",()=>{const c=$("#tocRail").classList.toggle("closed");$("#tocToggle").textContent=c?"Show":"Hide";$("#tocToggle").setAttribute("aria-expanded",!c);store.set("gpu-ben-rail-closed",c)});
+function tocActive(){if(!tocItems)return;let best=tocItems[0];for(const it of tocItems){const el=document.getElementById(it.id);if(el&&el.getBoundingClientRect().top<170)best=it}
+  $$(".toc-list button").forEach(b=>b.classList.toggle("active",b.dataset.to===best.id));$("#tocBarCur").textContent=": "+best.txt}
+addEventListener("scroll",tocActive,{passive:true});
+function tocRender(id){tocItems=tocData[id]||null;const rail=$("#tocRail"),bar=$("#tocBar");
+  if(!tocItems){rail.hidden=true;bar.classList.remove("has");return}
+  const html=tocItems.map(it=>`<li class="${it.lvl}"><button type="button" data-to="${it.id}">${it.txt}</button></li>`).join("");$("#tocRailList").innerHTML=html;$("#tocBarList").innerHTML=html;rail.hidden=false;bar.classList.add("has");bar.open=false;tocActive()}
+document.addEventListener("click",e=>{const b=e.target.closest(".toc-list [data-to]");if(!b)return;const el=document.getElementById(b.dataset.to);el.scrollIntoView({behavior:reduce?"auto":"smooth",block:"start"});el.setAttribute("tabindex","-1");el.focus({preventScroll:true});$("#tocBar").open=false});
+const _route=route;route=function(){_route();const v=$(".view.on");tocRender(v?v.dataset.view:"home")};
+removeEventListener("hashchange",_route);addEventListener("hashchange",route);
+
+paintProgress();route();
+})();
+</script>
+</body>
+</html>
