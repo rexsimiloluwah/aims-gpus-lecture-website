@@ -1,8 +1,10 @@
-# GPUs and Model Acceleration with Ben
+# GPUs and Model Acceleration
 
-An interactive learning site for the AI Research Foundations GPUs lecture: six modules, calculators, a quiz, the Choose Your GPU worksheet, the lecture slides and resources.
+<p align="center"><img src=".github/ben-heart.webp" alt="Ben, the course's stick-figure learner, making a heart with his hands" width="150"></p>
 
-**Live site:** https://rexsimiloluwah.github.io/gpu-learning-site/
+An interactive learning site for the AI Research Foundations Course GPUs and Model Acceleration lecture at AIMS South Africa. This is designed for educators who might want to reuse the teaching materials.
+
+**Live site:** https://rexsimiloluwah.github.io/aims-gpus-lecture-website/
 
 Built with love by Simi Okunowo and Claude Opus 5.5, using [Astro](https://astro.build).
 
@@ -15,34 +17,13 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:4321/gpu-learning-site/ in your browser. Pages reload as you edit.
+Then open http://localhost:4321/aims-gpus-lecture-website/ in your browser. Pages reload as you edit.
 
 To check the production build:
 
 ```
 npm run build
 npm run preview
-```
-
-## Folder structure
-
-```
-src/
-  pages/                    one file per page; the URL follows the file name
-    index.astro             home
-    learn/*.astro           the six modules
-    slides.astro, quiz.astro, worksheet.astro, resources.astro, 404.astro
-  layouts/
-    BaseLayout.astro        header, learning path, "On this page" menu, footer, theme and progress
-    ModuleLayout.astro      module heading, slide link and previous / next buttons
-  components/               Ben's speech bubble, widget frame, icons and other small pieces
-  data/                     the content you are most likely to edit (see below)
-  scripts/lib.ts            shared helpers for the calculators
-  styles/global.css         all the styles
-public/assets/
-  img/                      Ben, backpack illustrations and the scaling laws paper
-  slides/                   the 78 lecture slides as images
-  downloads/                slides PDF and worksheet PDF
 ```
 
 ## Editing content
@@ -63,7 +44,7 @@ Each module page keeps its interactive widgets in a `<script>` block at the bott
 
 Every push to `main` builds the site and publishes it to GitHub Pages through `.github/workflows/deploy.yml`. In the repository settings, under Pages, the source must be **GitHub Actions**.
 
-The site is served from `/gpu-learning-site/`. If you rename the repository or use a custom domain, update `site` and `base` in `astro.config.mjs`, and the links in `src/data/site.ts`.
+The site is served from `/aims-gpus-lecture-website/`. If you rename the repository or use a custom domain, update `site` and `base` in `astro.config.mjs`, and the links in `src/data/site.ts`.
 
 ## Notes
 
