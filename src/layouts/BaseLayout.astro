@@ -51,7 +51,7 @@ const ogImage = new URL(url('assets/slides/slide-01.webp'), Astro.site);
 <body>
 <header class="top">
   <div class="top-in">
-    <a class="brand" href={url()}><img src={url('assets/img/ben_think.webp')} alt=""><span>GPUs and Model Acceleration<small>An interactive journey with Ben</small></span></a>
+    <a class="brand" href={url()}><img src={url('assets/img/ben_think.webp')} alt=""><span>GPUs and Model Acceleration<small>An interactive learning journey</small></span></a>
     <nav class="nav" aria-label="Main">
       {nav.map(([key, href, label]) => <a href={url(href)} aria-current={key === navKey ? 'page' : undefined}>{label}</a>)}
     </nav>
