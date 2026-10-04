@@ -1,7 +1,5 @@
 # GPUs and Model Acceleration
 
-<p align="center"><img src=".github/ben-heart.webp" alt="Ben, the course's stick-figure learner, making a heart with his hands" width="150"></p>
-
 An interactive learning site for the AI Research Foundations Course GPUs and Model Acceleration lecture at AIMS South Africa. This is designed for educators who might want to reuse the teaching materials.
 
 **Live site:** https://rexsimiloluwah.github.io/aims-gpus-lecture-website/
@@ -51,3 +49,9 @@ The site is served from `/aims-gpus-lecture-website/`. If you rename the reposit
 - Fonts load from Google Fonts. Everything else is in the repository.
 - Progress, quiz answers and the light or dark theme are saved in each visitor's browser (localStorage).
 - Old links from the single-page version (such as `/#m3` or `/#quiz`) redirect to the new pages.
+
+## Contribute
+
+Feel free to contribute to improve this educational resource. Thank you!
+
+<p align="center"><img src=".github/ben-heart.webp" alt="Ben, the course's stick-figure learner, making a heart with his hands" width="150"></p>
