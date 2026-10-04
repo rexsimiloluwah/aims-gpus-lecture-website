@@ -82,6 +82,7 @@ p{margin:0 0 14px;max-width:70ch}
 .kicker{font-size:15px;font-weight:600;color:var(--blue-ink);margin:0}
 .muted{color:var(--muted)}
 .mono{font-family:var(--mono)}
+:not(pre)>code{font-family:var(--mono);font-size:.88em;font-weight:500;background:var(--surface-2);border:1px solid var(--line);padding:1px 6px;border-radius:6px;overflow-wrap:anywhere}
 ul.clean{padding-left:20px;margin:0 0 14px}
 ul.clean li{margin:4px 0}
 
@@ -142,7 +143,7 @@ input[type=range]{width:100%;accent-color:var(--blue)}
 select,input[type=number],input[type=text]{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
 .seg{display:inline-flex;background:var(--surface-2);border-radius:99px;padding:3px;gap:2px;flex-wrap:wrap}
 .seg button{border:0;background:transparent;padding:6px 13px;border-radius:99px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted)}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.seg button[aria-pressed="true"],.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
 .readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .readout div{background:var(--surface-2);border-radius:12px;padding:12px 14px}
 .readout small{display:block;font-size:13px;color:var(--muted);font-weight:600}
@@ -158,6 +159,37 @@ select,input[type=number],input[type=text]{width:100%;padding:9px 11px;border-ra
 .hint{font-size:14px;color:var(--muted);margin-top:10px}
 
 /* hero */
+/* how-it-works steps */
+ol.steps{list-style:none;counter-reset:step;padding:0;margin:14px 0 18px;display:grid;gap:12px}
+ol.steps>li{counter-increment:step;display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start;max-width:70ch}
+ol.steps>li::before{content:counter(step);width:30px;height:30px;border-radius:50%;background:var(--blue-soft);color:var(--blue-ink);display:grid;place-items:center;font-weight:700;font-size:14px}
+.tile ul{margin:8px 0 0;padding-left:18px;font-size:15px;color:var(--ink)}
+.tile li{margin:4px 0}
+
+/* code cards */
+.code-tabs .widget-h{flex-wrap:wrap}
+.code-tabs .seg{margin-left:auto}
+.code-panel{position:relative}
+.code-panel pre.astro-code{margin:0;padding:18px 20px;font-family:var(--mono);font-size:14px;line-height:1.6;background:var(--surface)!important;overflow-x:auto}
+.code-panel .hint{max-width:none;margin:0;padding:12px 20px 14px;border-top:1px solid var(--line)}
+.code-out{border-top:1px solid var(--line);background:var(--surface-2);padding:10px 20px 14px}
+.code-out span{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px}
+.code-out pre{margin:0;font-family:var(--mono);font-size:14px;line-height:1.55;white-space:pre-wrap}
+.copy-btn{position:absolute;top:10px;right:12px;z-index:1;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;font-size:12px;font-weight:600;padding:3px 10px;cursor:pointer}
+.copy-btn:hover{color:var(--ink);border-color:var(--blue)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .astro-code,:root:not([data-theme="light"]) .astro-code span{color:var(--shiki-dark)!important}}
+:root[data-theme="dark"] .astro-code,:root[data-theme="dark"] .astro-code span{color:var(--shiki-dark)!important}
+
+
+/* quantization demo */
+table.data.quant td,table.data.quant th{text-align:center;font-family:var(--mono);font-size:14px;padding:8px 6px}
+table.data.quant th:first-child,table.data.quant td:first-child{text-align:left;font-family:var(--font);font-weight:600;color:var(--muted);font-size:13px;white-space:nowrap}
+table.data.quant td.g{background:color-mix(in srgb,var(--sage) 70%,transparent)}
+table.data.quant td.y{background:color-mix(in srgb,var(--yellow) 85%,transparent)}
+table.data.quant td.r{background:color-mix(in srgb,var(--pink) 85%,transparent)}
+table.data.quant td.sep{border-left:2px dashed var(--line)}
+table.data.quant tr.grp td{border-bottom:0;padding:0 6px 2px;font-size:12px;color:var(--muted)}
+
 .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:34px;align-items:center;margin-bottom:34px}
 .die-wrap{position:relative;border-radius:28px;background:linear-gradient(160deg,#16213A,#0E1526);padding:22px;box-shadow:var(--shadow);aspect-ratio:5/4}
 .die-wrap canvas{width:100%;height:100%;display:block;border-radius:16px}

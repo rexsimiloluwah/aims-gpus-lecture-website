@@ -1,6 +1,9 @@
 ---
 import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Ben from '../../components/Ben.astro';
+import CodeTabs from '../../components/CodeTabs.astro';
 import Widget from '../../components/Widget.astro';
+import { accumulationCode, mixedPrecisionCode, quantizationCode } from '../../data/module4-code';
 import { url } from '../../lib/url';
 ---
 <ModuleLayout
@@ -17,17 +20,66 @@ import { url } from '../../lib/url';
     </div>
   </div>
 
+  <!-- ================= QUANTIZATION ================= -->
   <h2>Quantization: keep fewer digits</h2>
   <figure class="card" style="background:var(--stage)"><img src={url('assets/img/books.webp')} alt="Four large hardcover books become four small paperbacks" style="margin:auto;max-height:150px"></figure>
-  <p style="margin-top:16px">We already do this with π: 3.14159265 becomes 3.14. Quantization stores each weight with fewer bits, so it takes less memory and less time to move, at a small cost in accuracy.</p>
+  <p style="margin-top:16px"><b>Why?</b> To make a model smaller, so it needs less memory and answers faster. We already do this with π: 3.14159265 becomes 3.14. Quantization stores each number with fewer bits, at a small cost in accuracy.</p>
+
+  <h3>How it works</h3>
+  <p>Pick a small set of evenly spaced levels, then snap every number to the nearest one. The scale <i>s</i> sets the gap between levels. The zero-point <i>z</i> shifts the levels when the numbers aren't centred on zero.</p>
+  <figure class="eq" aria-label="q equals round of x divided by s, plus z">
+    <math display="block"><mrow><mi class="ct">q</mi><mo>=</mo><mtext>round</mtext><mrow><mo>(</mo><mfrac><mi class="cg">x</mi><mi class="co">s</mi></mfrac><mo>)</mo></mrow><mo>+</mo><mi class="cv">z</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>x</b> original number</span><span><i class="bg-t"></i><b>q</b> stored integer</span><span><i class="bg-o"></i><b>s</b> scale</span><span><i class="bg-v"></i><b>z</b> zero-point</span></figcaption>
+  </figure>
+  <p>To use a number, the GPU turns it back: <i>x</i> ≈ <i>s</i> × (<i>q</i> − <i>z</i>). The small gap left over is the quantization error. For int8 with <i>z</i> = 0, the scale is the largest |<i>x</i>| ÷ 127, so the biggest number lands exactly on 127.</p>
+  <Widget title="Quantize eight numbers" tag="Interactive" id="w-qz">
+    <div class="ctl">
+      <div><label>Bits</label><div class="seg" id="qzBits"><button aria-pressed="true" data-v="8">8-bit</button><button aria-pressed="false" data-v="4">4-bit</button><button aria-pressed="false" data-v="2">2-bit</button></div></div>
+      <div><label>Scales</label><div class="seg" id="qzScale"><button aria-pressed="true" data-v="8">One for all</button><button aria-pressed="false" data-v="4">One per group of 4</button></div></div>
+      <div><label for="qzOut">Outlier</label><label style="font-weight:500;color:var(--ink)"><input type="checkbox" id="qzOut"> Make one number much bigger</label></div>
+    </div>
+    <div class="tbl-wrap"><table class="data quant" id="qzTable"></table></div>
+    <div class="readout" style="margin-top:14px"><div><small>Scale s</small><strong id="qzS"></strong></div><div><small>Integers allowed</small><strong id="qzR"></strong></div><div><small>Average error</small><strong id="qzE"></strong></div></div>
+    <div class="verdict" id="qzV"></div>
+  </Widget>
+
+  <h3>Benefits and trade-offs</h3>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Benefits</h4><ul>
+      <li>4-bit weights need about a quarter of the memory of 16-bit ones.</li>
+      <li>Faster text generation: each new token reads fewer bytes from memory (Module 6).</li>
+      <li>Bigger models fit on smaller, cheaper GPUs.</li>
+    </ul></div>
+    <div class="tile t-peach"><h4>Trade-offs</h4><ul>
+      <li>Some quality loss: 8-bit is close to lossless, 4-bit usually loses a little, 3-bit and 2-bit lose a lot.</li>
+      <li>Small models suffer more than big ones.</li>
+      <li>Not always faster: it depends on the GPU, the software and the batch size.</li>
+      <li>You can't train quantized weights directly. QLoRA freezes a 4-bit model and trains small 16-bit adapters instead.</li>
+    </ul></div>
+  </div>
   <Widget title="Same model, four formats" tag="Interactive" id="w-quant">
     <div class="ctl"><div><label for="qN">Parameters <output id="qNo"></output></label><input type="range" id="qN" min="0" max="100" value="45"></div><div><label for="qV">GPU memory</label><select id="qV"><option value="16" selected>16 GB</option><option value="24">24 GB</option><option value="40">40 GB</option><option value="80">80 GB</option></select></div></div>
     <div id="qBars" style="display:grid;gap:10px;margin-top:6px"></div>
   </Widget>
 
+  <h3>In practice</h3>
+  <CodeTabs title="Run it yourself" tabs={quantizationCode} />
+  <p><b>Libraries:</b> <code>bitsandbytes</code> with Hugging Face Transformers (load any model in 8 or 4 bits), Unsloth (fine-tune in 4 bits with QLoRA), <code>torchao</code> (PyTorch's own quantization), llm-compressor and GPTQModel (make GPTQ or AWQ checkpoints), and vLLM, TensorRT-LLM, llama.cpp and Ollama (serve quantized models).</p>
+  <div class="take">Quantization trades a little accuracy for a lot of memory. It shines when serving models. For training, use mixed precision, or QLoRA to fine-tune.</div>
+
+  <!-- ================= MIXED PRECISION ================= -->
   <h2>Mixed precision: fast where we can, precise where we must</h2>
   <figure class="card" style="background:var(--stage)"><img src={url('assets/img/folders.webp')} alt="Four big folders become two big folders for important documents and two compact ones" style="margin:auto;max-height:150px"></figure>
-  <p style="margin-top:16px">Most of the maths (forward and backward passes) runs in bfloat16. A float32 copy of the weights, the master weights, receives the updates. Why? Try it.</p>
+  <p style="margin-top:16px"><b>Why?</b> Training in float32 is slow and memory-hungry. GPUs do 16-bit maths many times faster on their Tensor Cores, and 16-bit activations take half the memory. But a few steps really need float32's precision.</p>
+
+  <h3>How it works</h3>
+  <ol class="steps">
+    <li><span>Keep the weights in <b>float32</b>. This is the master copy.</span></li>
+    <li><span>Run the forward and backward passes in mixed precision: matrix multiplications in <b>bfloat16</b>, and sensitive steps like softmax, normalization and the loss in float32. PyTorch's <code>autocast</code> picks for you.</span></li>
+    <li><span>The gradients arrive in float32, and the optimizer updates the float32 weights, so tiny updates aren't rounded away.</span></li>
+    <li><span>With <b>float16</b> only: multiply the loss by a big number before the backward pass, so tiny gradients don't round to zero, then divide them back before the update. This is <b>loss scaling</b>. bfloat16 has float32's range, so it doesn't need it.</span></li>
+  </ol>
+  <p>Why must the update stay in float32? Try it:</p>
   <Widget title="Can a tiny update survive?" tag="Real bfloat16 rounding" id="w-mp">
     <div class="ctl"><div><label for="mpW">Weight</label><input type="number" id="mpW" value="1" step="0.1"></div><div><label for="mpU">Update (learning rate × gradient)</label><input type="number" id="mpU" value="0.001" step="0.0001"></div></div>
     <div class="readout"><div><small>float32 result</small><strong id="mp32"></strong></div><div><small>bfloat16 result</small><strong id="mp16"></strong></div></div>
@@ -35,11 +87,43 @@ import { url } from '../../lib/url';
   </Widget>
   <figure class="eq" aria-label="Weight update: w becomes w minus eta times gradient of L with respect to w">
     <math display="block"><mrow><mi class="cg">w</mi><mo>←</mo><mi class="cg">w</mi><mo>−</mo><mi class="ct">η</mi><mo>·</mo><msub><mo class="co">∇</mo><mi class="co">w</mi></msub><mi class="co">L</mi></mrow></math>
-    <figcaption class="legend"><span><i class="bg-g"></i><b>w</b> master weight, kept in float32</span><span><i class="bg-t"></i><b>η</b> learning rate</span><span><i class="bg-o"></i><b>∇L</b> gradient, computed in bfloat16</span></figcaption>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>w</b> master weight, kept in float32</span><span><i class="bg-t"></i><b>η</b> learning rate</span><span><i class="bg-o"></i><b>∇L</b> gradient, from the bfloat16 maths</span></figcaption>
   </figure>
 
+  <h3>Benefits and trade-offs</h3>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Benefits</h4><ul>
+      <li>Faster maths: an H100 does about 990 TFLOPS in bfloat16, against 67 in float32. Real training often runs 2 to 3 times faster.</li>
+      <li>Activations take half the memory, so bigger batches fit.</li>
+      <li>Little or no loss in accuracy.</li>
+    </ul></div>
+    <div class="tile t-peach"><h4>Trade-offs</h4><ul>
+      <li>The model state doesn't shrink: weights, gradients and Adam still need about 16 bytes per parameter.</li>
+      <li>bfloat16 needs an Ampere or newer GPU (A100, H100, RTX 30 series and up). On a T4, like free Colab, use float16.</li>
+      <li>float16 overflows above 65,504 and loses tiny values, so it needs loss scaling.</li>
+    </ul></div>
+  </div>
+
+  <h3>In practice</h3>
+  <CodeTabs title="Run it yourself" tabs={mixedPrecisionCode} />
+  <p><b>Libraries:</b> PyTorch AMP (<code>torch.autocast</code> and <code>torch.amp.GradScaler</code>), Hugging Face Trainer and Accelerate, PyTorch Lightning, Keras (mixed precision policies), and NVIDIA Transformer Engine for 8-bit (FP8) training on H100 and newer GPUs.</p>
+  <div class="take">Compute in 16-bit, keep the weights and the update in float32. Training gets faster and activations take half the memory.</div>
+
+  <!-- ================= GRADIENT ACCUMULATION ================= -->
   <h2>Gradient accumulation: several trips</h2>
   <figure class="card" style="background:var(--stage)"><img src={url('assets/img/trips.webp')} alt="One full backpack becomes four smaller backpack trips" style="margin:auto;max-height:120px"></figure>
+  <p style="margin-top:16px"><b>Why?</b> Bigger batches give smoother, more stable training. But activation memory grows with the batch size, so the batch you want may not fit on your GPU.</p>
+
+  <h3>How it works</h3>
+  <ol class="steps">
+    <li><span>Split the batch you want into micro-batches that fit: a batch of 64 becomes 4 micro-batches of 16.</span></li>
+    <li><span>Run the forward and backward pass on each micro-batch. PyTorch adds the gradients up in <code>.grad</code>. Divide each loss by 4, so the sum becomes the average.</span></li>
+    <li><span>After the 4th micro-batch, update the weights once and reset the gradients to zero.</span></li>
+  </ol>
+  <figure class="eq" aria-label="Effective batch size equals micro-batch size times accumulation steps times number of GPUs">
+    <math display="block"><mrow><mtext>Effective batch</mtext><mo>=</mo><mtext class="cg">micro-batch</mtext><mo>×</mo><mtext class="ct">accumulation steps</mtext><mo>×</mo><mtext class="cb">GPUs</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i>what fits in memory</span><span><i class="bg-t"></i>micro-batches per update</span><span><i class="bg-b"></i>data-parallel copies (Module 5)</span></figcaption>
+  </figure>
   <Widget title="Batch of 64 on a GPU that fits 16" tag="Step through it" id="w-ga">
     <div class="grid4" id="gaSteps"></div>
     <div style="margin:16px 0 6px;font-size:14px;font-weight:600;color:var(--muted)">Accumulated gradient</div>
@@ -47,11 +131,63 @@ import { url } from '../../lib/url';
     <div class="row" style="margin-top:14px"><button class="btn" id="gaNext">Run micro-batch 1</button><button class="btn ghost" id="gaReset">Reset</button></div>
     <div class="verdict mid" id="gaV">Each micro-batch computes gradients but doesn't update the weights yet.</div>
   </Widget>
-  <div class="take">Gradient accumulation gives big-batch stability with small-batch memory. The cost is time: each update needs several forward and backward passes.</div>
+
+  <h3>Benefits and trade-offs</h3>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Benefits</h4><ul>
+      <li>Train with a big effective batch on a small GPU.</li>
+      <li>The same gradient as the big batch, up to tiny rounding differences.</li>
+      <li>One setting in most libraries.</li>
+    </ul></div>
+    <div class="tile t-peach"><h4>Trade-offs</h4><ul>
+      <li>Slower than a real big batch: the maths is the same, but small micro-batches keep the GPU less busy.</li>
+      <li>Only activation memory shrinks. Weights, gradients and optimizer states stay the same size.</li>
+      <li>Fewer updates per epoch, so tune the learning rate for the effective batch size.</li>
+    </ul></div>
+  </div>
+
+  <h3>In practice</h3>
+  <CodeTabs title="Run it yourself" tabs={accumulationCode} />
+  <p><b>Libraries:</b> plain PyTorch (a few lines), Hugging Face Trainer (<code>gradient_accumulation_steps</code>) and Accelerate (<code>accelerator.accumulate</code>), PyTorch Lightning (<code>accumulate_grad_batches</code>) and DeepSpeed (<code>gradient_accumulation_steps</code>).</p>
+  <div class="take">Gradient accumulation gives big-batch stability with small-batch memory. The cost is time: the micro-batches run one after another.</div>
+
+  <!-- ================= COMPARISON ================= -->
+  <h2>Comparing the three tricks</h2>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>Technique</th><th>What changes?</th><th>Main benefit</th><th>Main trade-off</th></tr></thead><tbody>
+    <tr><td><b>Quantization</b></td><td>How numbers are stored</td><td>Less memory, faster inference</td><td>Some quality loss</td></tr>
+    <tr><td><b>Mixed precision</b></td><td>The precision of the maths</td><td>Faster training, less activation memory</td><td>Numerical care: loss scaling and the right GPU</td></tr>
+    <tr><td><b>Gradient accumulation</b></td><td>When the weights are updated</td><td>Big batches on a small GPU</td><td>Slower than a real big batch</td></tr>
+  </tbody></table></div>
+  <div class="take">Optimization is a trade-off between memory, speed, quality and cost.</div>
+  <Ben img="ben_think" alt="Ben thinking"><p>So there's no single best trick. Instead of asking "which optimization is best?", I should ask: <b>what is my bottleneck</b>, and <b>what am I willing to trade</b> to remove it?</p></Ben>
 </ModuleLayout>
 
 <script>
-import { $, fmtNum, logScale } from '../../scripts/lib';
+import { $, fmtNum, logScale, seg } from '../../scripts/lib';
+
+/* ---------- quantize eight numbers ---------- */
+const X = [0.21, -0.47, 0.08, 0.92, -0.33, 0.65, -0.12, 0.40];
+const qzBits = seg('qzBits', qzCalc), qzScale = seg('qzScale', qzCalc);
+function qzCalc() {
+  const bits = +qzBits(), group = +qzScale(), outlier = $('#qzOut').checked;
+  const x = X.slice(); if (outlier) x[5] = 6.5;
+  const qmax = 2 ** (bits - 1) - 1; const scales: number[] = [], q: number[] = [], r: number[] = [];
+  for (let g = 0; g < 8; g += group) { const s = Math.max(...x.slice(g, g + group).map(Math.abs)) / qmax; scales.push(s); for (let i = g; i < g + group; i++) { q[i] = Math.round(x[i] / s); r[i] = q[i] * s } }
+  const err = x.map((v, i) => Math.abs(v - r[i])), avg = err.reduce((a, b) => a + b, 0) / 8;
+  const cls = (e: number) => e < 0.02 ? 'g' : e < 0.08 ? 'y' : 'r', sep = (i: number) => group === 4 && i === 4 ? ' sep' : '';
+  $('#qzTable').innerHTML = '<tbody>' + (group === 4 ? '<tr class="grp"><td></td><td colspan="4">group 1</td><td colspan="4" class="sep">group 2</td></tr>' : '')
+    + `<tr><th scope="row">Original x</th>${x.map((v, i) => `<td class="${sep(i)}">${v.toFixed(2)}</td>`).join('')}</tr>`
+    + `<tr><th scope="row">Stored q</th>${q.map((v, i) => `<td class="${sep(i)}">${v + 0}</td>`).join('')}</tr>`
+    + `<tr><th scope="row">Recovered s × q</th>${r.map((v, i) => `<td class="${cls(err[i])}${sep(i)}">${(v + 0).toFixed(2)}</td>`).join('')}</tr></tbody>`;
+  $('#qzS').textContent = scales.map(s => s < 0.1 ? s.toFixed(4) : s.toFixed(2)).join(' / '); $('#qzR').textContent = `−${qmax} to ${qmax}`; $('#qzE').textContent = avg.toFixed(3);
+  const v = $('#qzV');
+  if (outlier && bits < 8 && group === 8) { v.className = 'verdict bad'; v.textContent = 'The outlier stretched the scale, so most small numbers rounded to 0. Try one scale per group of 4.' }
+  else if (outlier && bits < 8) { v.className = 'verdict mid'; v.textContent = 'Better: only the group with the outlier lost detail. Real 4-bit formats give every small block, such as 64 numbers, its own scale.' }
+  else if (bits === 8) { v.className = 'verdict ok'; v.textContent = '8 bits give 255 levels, so the numbers come back almost exactly, in a quarter of float32\'s memory.' }
+  else if (bits === 4) { v.className = 'verdict mid'; v.textContent = '4 bits give only 15 levels: small errors, in an eighth of float32\'s memory.' }
+  else { v.className = 'verdict bad'; v.textContent = '2 bits give only 3 levels (−1, 0 and 1), so most of the detail is gone.' }
+}
+$('#qzOut').addEventListener('input', qzCalc); qzCalc();
 
 /* ---------- quantization: same model, four formats ---------- */
 function quantCalc() {

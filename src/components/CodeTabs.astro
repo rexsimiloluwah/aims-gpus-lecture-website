@@ -1,0 +1,56 @@
+---
+import { Code } from 'astro:components';
+
+interface Tab {
+  /** Tab label, e.g. the library name. */
+  label: string;
+  code: string;
+  lang?: 'python' | 'bash' | 'json' | 'yaml';
+  /** What the code prints when you run it. Only use real, captured output. */
+  output?: string;
+  /** One line under the code, e.g. what to expect or when to use this option. */
+  note?: string;
+}
+
+interface Props {
+  title: string;
+  tabs: Tab[];
+}
+
+const { title, tabs } = Astro.props;
+---
+<div class="widget code-tabs">
+  <div class="widget-h">
+    <h3>{title}</h3>
+    {tabs.length > 1 && (
+      <div class="seg" role="tablist" aria-label={title}>
+        {tabs.map((t, i) => <button type="button" role="tab" aria-selected={i === 0 ? 'true' : 'false'}>{t.label}</button>)}
+      </div>
+    )}
+  </div>
+  {tabs.map((t, i) => (
+    <div class="code-panel" role={tabs.length > 1 ? 'tabpanel' : undefined} aria-label={t.label} hidden={i !== 0}>
+      <button type="button" class="copy-btn" aria-label={`Copy the ${t.label} code`}>Copy</button>
+      <Code code={t.code.trim()} lang={t.lang ?? 'python'} themes={{ light: 'github-light', dark: 'github-dark' }} />
+      {t.output && <div class="code-out"><span>Output</span><pre>{t.output.trim()}</pre></div>}
+      {t.note && <p class="hint">{t.note}</p>}
+    </div>
+  ))}
+</div>
+
+<script>
+document.querySelectorAll<HTMLElement>('.code-tabs').forEach(box => {
+  const tabs = [...box.querySelectorAll<HTMLElement>('[role="tab"]')], panels = [...box.querySelectorAll<HTMLElement>('.code-panel')];
+  tabs.forEach((t, i) => t.addEventListener('click', () => {
+    tabs.forEach((x, j) => x.setAttribute('aria-selected', String(i === j)));
+    panels.forEach((p, j) => p.hidden = i !== j);
+  }));
+  panels.forEach(p => {
+    const btn = p.querySelector<HTMLButtonElement>('.copy-btn')!, code = p.querySelector('pre.astro-code')!.textContent!;
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(code); btn.textContent = 'Copied' } catch (e) { btn.textContent = 'Select and copy' }
+      setTimeout(() => btn.textContent = 'Copy', 1800);
+    });
+  });
+});
+</script>
