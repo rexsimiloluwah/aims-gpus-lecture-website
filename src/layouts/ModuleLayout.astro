@@ -1,0 +1,30 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { modules, modulePath } from '../data/modules';
+import { url } from '../lib/url';
+
+interface Props {
+  /** Module id from src/data/modules.ts, e.g. 'm1'. */
+  id: string;
+  heading: string;
+  lede: string;
+}
+
+const { id, heading, lede } = Astro.props;
+const i = modules.findIndex(m => m.id === id);
+const m = modules[i], prev = modules[i - 1], next = modules[i + 1];
+const [from, to] = m.slides;
+---
+<BaseLayout title={m.title} description={lede} current={id}>
+  <p class="kicker">Module {m.n} of {modules.length}</p>
+  <h1>{heading}</h1>
+  <p class="lede">{lede}</p>
+  <slot />
+  <div class="row"><a class="slide-link" href={url(`slides/#${from}`)}>See slides {from} to {to}</a></div>
+  <div class="mod-foot">
+    {prev
+      ? <a class="btn ghost" href={url(modulePath(prev))}>Previous: {prev.title}</a>
+      : <a class="btn ghost" href={url()}>Back to home</a>}
+    <a class="btn" href={url(next ? modulePath(next) : 'quiz/')} data-complete={id}>{next ? 'Mark done and continue' : 'Mark done and take the quiz'}</a>
+  </div>
+</BaseLayout>

@@ -1,0 +1,131 @@
+---
+import '../styles/global.css';
+import Icon from '../components/Icon.astro';
+import { modules, modulePath } from '../data/modules';
+import { site } from '../data/site';
+import { url } from '../lib/url';
+
+interface Props {
+  /** Page name, shown before the site title in the browser tab. */
+  title?: string;
+  description?: string;
+  /** Which page this is: 'home', a module id like 'm3', 'slides', 'quiz', 'worksheet', 'resources'. */
+  current: string;
+  wide?: boolean;
+}
+
+const { title, description = site.description, current, wide = false } = Astro.props;
+const pageTitle = title ? `${title} · ${site.title}` : site.title;
+const navKey = /^m\d$/.test(current) ? 'learn' : current;
+const nav = [
+  ['home', '', 'Home'],
+  ['learn', modulePath(modules[0]), 'Learn'],
+  ['slides', 'slides/', 'Slides'],
+  ['quiz', 'quiz/', 'Quiz'],
+  ['worksheet', 'worksheet/', 'Worksheet'],
+  ['resources', 'resources/', 'Resources'],
+];
+const ogImage = new URL(url('assets/slides/slide-01.webp'), Astro.site);
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{pageTitle}</title>
+<meta name="description" content={description}>
+<meta property="og:type" content="website">
+<meta property="og:title" content={pageTitle}>
+<meta property="og:description" content={description}>
+<meta property="og:image" content={ogImage}>
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/webp" href={url('favicon.webp')}>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<script is:inline>
+  /* Apply the saved theme before first paint. */
+  try { const t = JSON.parse(localStorage.getItem("gpu-ben-theme")); if (t) document.documentElement.dataset.theme = t } catch (e) {}
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <a class="brand" href={url()}><img src={url('assets/img/ben_think.webp')} alt=""><span>GPUs and Model Acceleration<small>An interactive journey with Ben</small></span></a>
+    <nav class="nav" aria-label="Main">
+      {nav.map(([key, href, label]) => <a href={url(href)} aria-current={key === navKey ? 'page' : undefined}>{label}</a>)}
+    </nav>
+    <div class="top-actions">
+      <a class="theme-btn" href={site.repoUrl} target="_blank" rel="noopener" aria-label="View the source code on GitHub" title="View the source code on GitHub"><Icon name="github" /></a>
+      <button class="theme-btn" id="themeBtn" aria-label="Switch light or dark theme"><Icon name="moon" strokeWidth={2} /></button>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+<aside class="path" aria-label="Learning path">
+  <h2>Your learning path</h2>
+  <ol id="pathList">
+    {modules.map(m => (
+      <li data-m={m.id}><a href={url(modulePath(m))} aria-current={m.id === current ? 'page' : undefined}><span class="dot">{m.n}</span><span class="t">{m.title}<small>{m.tagline}</small></span></a></li>
+    ))}
+  </ol>
+  <div class="progress"><span id="progText">0 of {modules.length} modules done</span><div class="bar"><i id="progBar"></i></div></div>
+</aside>
+
+<main id="main">
+<details class="toc-bar" id="tocBar"><summary>On this page <span id="tocBarCur"></span><Icon name="chevron" strokeWidth={2} /></summary><ol class="toc-list" id="tocBarList"></ol></details>
+<article class:list={['view', { wide }]} id="view">
+  <slot />
+</article>
+</main>
+<aside class="toc-rail" id="tocRail" aria-label="On this page" hidden><div class="tr-h"><b>On this page</b><button type="button" id="tocToggle" aria-expanded="true">Hide</button></div><ol class="toc-list" id="tocRailList"></ol></aside>
+</div>
+<footer class="foot">Built with ❤️ by <b>Simi Okunowo</b> <em>and Claude Opus 5.5</em> · <a href={site.repoUrl} target="_blank" rel="noopener">Source on GitHub</a></footer>
+
+<script>
+import { $, $$, store, reduce } from '../scripts/lib';
+
+/* ---------- theme ---------- */
+const root = document.documentElement;
+$('#themeBtn').addEventListener('click', () => { const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; root.dataset.theme = dark ? 'light' : 'dark'; store.set('gpu-ben-theme', root.dataset.theme) });
+
+/* ---------- progress ---------- */
+const done = new Set(store.get<string[]>('gpu-ben-done', []));
+function paintProgress() {
+  const total = $$('#pathList li').length, n = done.size;
+  $('#progText').textContent = n + ' of ' + total + ' modules done'; $('#progBar').style.width = (n / total * 100) + '%';
+  $$('#pathList li').forEach(li => li.classList.toggle('done', done.has(li.dataset.m)));
+  $$('#journey a').forEach(a => a.classList.toggle('done', done.has(a.dataset.m)));
+}
+/* "Mark done" links record progress, then navigate as normal. */
+document.addEventListener('click', e => { const c = (e.target as HTMLElement).closest<HTMLElement>('[data-complete]'); if (c) { done.add(c.dataset.complete!); store.set('gpu-ben-done', [...done]) } });
+paintProgress();
+
+/* ---------- per-page table of contents ---------- */
+const view = $('#view'), rail = $('#tocRail'), bar = $('#tocBar');
+const isTop = (h: Element) => h.tagName === 'H2' || !!h.closest('.ws-q');
+const hs = [...view.querySelectorAll('h2, h3')].filter((h: Element) => !h.closest('.widget-h,.tile,.feature,.ben,.journey,.res') && (h.tagName === 'H2' || h.parentElement === view || h.closest('.ws-q')));
+if (hs.filter(isTop).length >= 2) {
+  const slug = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const items = hs.map((h: Element) => {
+    if (!h.id) { const b = slug(h.textContent!) || 'section'; let id = b, k = 2; while (document.getElementById(id)) id = b + '-' + k++; h.id = id }
+    return { id: h.id, lvl: isTop(h) ? 'h2' : 'h3', txt: h.textContent!.trim() };
+  });
+  const html = items.map(it => `<li class="${it.lvl}"><button type="button" data-to="${it.id}">${esc(it.txt)}</button></li>`).join('');
+  $('#tocRailList').innerHTML = html; $('#tocBarList').innerHTML = html; rail.hidden = false; bar.classList.add('has');
+
+  function tocActive() {
+    let best = items[0]; for (const it of items) { const el = document.getElementById(it.id); if (el && el.getBoundingClientRect().top < 170) best = it }
+    $$('.toc-list button').forEach(b => b.classList.toggle('active', b.dataset.to === best.id)); $('#tocBarCur').textContent = ': ' + best.txt;
+  }
+  addEventListener('scroll', tocActive, { passive: true }); tocActive();
+
+  if (store.get('gpu-ben-rail-closed', false)) { rail.classList.add('closed'); $('#tocToggle').textContent = 'Show'; $('#tocToggle').setAttribute('aria-expanded', 'false') }
+  $('#tocToggle').addEventListener('click', () => { const c = rail.classList.toggle('closed'); $('#tocToggle').textContent = c ? 'Show' : 'Hide'; $('#tocToggle').setAttribute('aria-expanded', String(!c)); store.set('gpu-ben-rail-closed', c) });
+  document.addEventListener('click', e => { const b = (e.target as HTMLElement).closest<HTMLElement>('.toc-list [data-to]'); if (!b) return; const el = document.getElementById(b.dataset.to!)!; el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' }); el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); bar.open = false });
+}
+</script>
+</body>
+</html>

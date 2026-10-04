@@ -1,0 +1,20 @@
+---
+import type { WorksheetQuestion } from '../data/worksheet';
+
+interface Props {
+  /** The question, plus k: its index in the worksheet data, used for the input ids. */
+  q: WorksheetQuestion & { k: number };
+}
+
+const { q } = Astro.props;
+---
+<div class="card ws-q"><h3 style="margin-top:0">{q.title}</h3><p class="muted">{q.prompt}</p>
+  <div class="ws-row">
+    {q.fields.map(([label, answer], j) => (
+      <div class="ws-in"><label for={`ws${q.k}_${j}`}>{label}</label><input type="number" step="any" id={`ws${q.k}_${j}`} data-ans={answer}></div>
+    ))}
+  </div>
+  <div class="row" style="margin-top:14px"><button class="btn" data-check={q.k}>Check my answers</button><button class="btn ghost" data-show={q.k}>Show the working</button></div>
+  <div class="explain" id={`wsx${q.k}`} hidden><b>💡 Working</b>{q.working}</div>
+  <div class="reflect"><b>💡 Reflect</b><br>{q.reflect}</div>
+</div>

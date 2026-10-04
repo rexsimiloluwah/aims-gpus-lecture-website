@@ -1,0 +1,16 @@
+---
+import { url } from '../lib/url';
+
+interface Props {
+  /** Image name in public/assets/img, without the extension, e.g. "ben_idea". */
+  img: string;
+  alt: string;
+  style?: string;
+}
+
+const { img, alt, style } = Astro.props;
+---
+<div class="ben" style={style}>
+  <div class="stage"><img src={url(`assets/img/${img}.webp`)} alt={alt}></div>
+  <div class="say"><slot /></div>
+</div>

@@ -1,0 +1,22 @@
+export interface QuizQuestion {
+  q: string;
+  options: string[];
+  /** Index of the correct option. */
+  answer: number;
+  explain: string;
+}
+
+export const quiz: QuizQuestion[] = [
+  { q: 'Why are GPUs particularly well suited for modern AI?', options: ['Clock speed', 'Parallel processing', 'Larger memory', 'Higher bandwidth'], answer: 1, explain: 'Modern AI is mostly large matrix multiplications that split into many small, independent calculations. GPUs have thousands of cores that run them at the same time.' },
+  { q: 'If both the number of parameters and the number of training tokens double, the estimated training FLOPs become:', options: ['2× larger', '4× larger', '6× larger', '8× larger'], answer: 1, explain: 'FLOPs = 6 × N × D, so 6 × 2N × 2D is 4 times the original. The 6 is a constant.' },
+  { q: 'Three LLMs train on one 600 TFLOPS GPU. A: 7B params, 1T tokens. B: 13B, 300B. C: 3B, 2T. Which takes longest?', options: ['Model A', 'Model B', 'Model C', 'All the same'], answer: 0, explain: 'Time depends on N × D. A needs 4.2 × 10²² FLOPs (about 810 days), more than C (3.6 × 10²²) or B (2.34 × 10²²).' },
+  { q: 'How does bfloat16 improve on float32 for deep learning?', options: ['It is more precise', 'Smaller mantissa, same exponent size', 'Smaller exponent, same mantissa size', 'Same precision and range, less memory'], answer: 1, explain: "bfloat16 keeps float32's 8 exponent bits, so it covers the same range, but cuts the mantissa from 23 to 7 bits, halving memory at some cost in precision." },
+  { q: 'Which does NOT change how much GPU memory training needs?', options: ['Batch size', 'Number of parameters', 'Sequence length', 'Total training tokens in the dataset'], answer: 3, explain: 'Memory per step depends on parameters (weights, gradients, optimizer) and on batch size and sequence length (activations). Dataset size only changes how long training takes.' },
+  { q: 'A 24 GB GPU, parameter memory only, bfloat16. P: 7B, Q: 13B, R: 11B. Which will NOT fit?', options: ['Q only', 'Q and R', 'P and Q', 'All fit'], answer: 0, explain: 'At 2 bytes per parameter, P needs 14 GB and R needs 22 GB, so both fit. Q needs 26 GB.' },
+  { q: "What is the main way FlashAttention fixes Attention's memory-bandwidth bottleneck?", options: ['It approximates attention with fewer calculations', 'It processes tiles in fast on-chip SRAM, so the full table never goes to HBM', 'It adds more HBM', 'It stores the table in int4'], answer: 1, explain: 'The table is too big for SRAM, so standard attention moves it to and from HBM repeatedly. FlashAttention finishes each tile inside SRAM, computing exact attention with far fewer HBM reads and writes.' },
+  { q: 'What is the main trade-off of gradient accumulation?', options: ['Higher memory use', 'Lower accuracy', 'Longer training time', 'More parameters'], answer: 2, explain: 'Each update needs several smaller forward and backward passes, so training takes longer. Memory drops and accuracy stays the same.' },
+  { q: 'Why are master weights kept in float32 in mixed-precision training?', options: ['To reduce memory', 'For numerical stability', 'To enable kernel fusion', 'To compute faster'], answer: 1, explain: 'Updates are tiny and can round away in 16-bit (1.00 + 0.0001 = 1.00). Float32 master weights keep them.' },
+  { q: 'A 70B model in bfloat16 is quantized to int4. Parameter memory, and does it fit on one 80 GB GPU?', options: ['35 GB, fits', '70 GB, fits', '140 GB, does not fit', '17.5 GB, fits'], answer: 0, explain: 'int4 is 0.5 bytes per parameter: 70B × 0.5 = 35 GB, down from 140 GB. That fits in 80 GB.' },
+  { q: "A 70B model doesn't fit on one GPU. You put layers 1 to 40 on GPU 1 and 41 to 80 on GPU 2. What is this?", options: ['Data parallelism', 'Tensor parallelism', 'Pipeline parallelism', 'Gradient accumulation'], answer: 2, explain: 'Splitting consecutive layers into stages is pipeline parallelism. Micro-batches reduce the idle bubble.' },
+  { q: 'Why is decoding (generating one token at a time) usually memory-bandwidth-bound?', options: ['It uses more FLOPs than prefill', 'Each token reads every weight and the KV cache for very little maths', 'The GPU runs out of memory', 'Tokens are sent between GPUs'], answer: 1, explain: 'For each new token, all weights and the KV cache stream from HBM, but the maths per byte is tiny. That is why quantization and batching speed decode up.' },
+];

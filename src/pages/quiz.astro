@@ -1,0 +1,34 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { quiz } from '../data/quiz';
+---
+<BaseLayout title="Quiz" description="Check your understanding of GPUs and model acceleration with questions, instant feedback and explanations." current="quiz">
+  <p class="kicker">Check your understanding</p>
+  <h1>GPU and acceleration quiz</h1>
+  <p class="lede">{quiz.length} questions in the order the course teaches them. Pick an answer to see whether you're right and why.</p>
+  <div class="card" id="quizCard"></div>
+</BaseLayout>
+
+<script>
+import { $, store } from '../scripts/lib';
+import { quiz as Q } from '../data/quiz';
+import { url } from '../lib/url';
+
+let qi = 0, ans = store.get<(number | null)[]>('gpu-ben-quiz', []);
+const answered = (i: number) => ans[i] !== undefined && ans[i] !== null;
+function quizPaint() {
+  const c = $('#quizCard');
+  if (qi >= Q.length) {
+    const sc = ans.filter((a, i) => a === Q[i].answer).length;
+    c.innerHTML = `<div class="ben" style="margin:0"><div class="stage"><img src="${url('assets/img/ben_fire.webp')}" alt="Ben celebrating"></div><div class="say"><p style="font-size:20px"><b>You scored ${sc} out of ${Q.length}.</b></p><p class="muted" style="margin-top:6px">${sc === Q.length ? "Perfect. You're ready to plan real GPU runs." : sc >= 8 ? 'Strong work. Revisit the modules for the ones you missed.' : 'Good start. The modules and calculators will help these ideas click.'}</p></div></div><div class="row" style="margin-top:18px"><button class="btn" id="qAgain">Try again</button><a class="btn ghost" href="${url('worksheet/')}">Go to the worksheet</a></div>`;
+    $('#qAgain').onclick = () => { qi = 0; ans = []; store.set('gpu-ben-quiz', ans); quizPaint() }; return;
+  }
+  const { q, options: o, answer: r, explain: ex } = Q[qi]; const a = ans[qi]; const done = answered(qi);
+  c.innerHTML = `<div class="q-top"><span class="pill">Question ${qi + 1} of ${Q.length}</span><div class="score-dots">${Q.map((x, i) => `<i class="${!answered(i) ? '' : ans[i] === x.answer ? 'r' : 'w'} ${i === qi ? 'cur' : ''}"></i>`).join('')}</div></div>
+  <p class="q-text">${q}</p><div class="opts">${o.map((t, i) => `<button class="opt ${!done ? '' : i === r ? 'right' : i === a ? 'wrong' : 'fade'}" data-i="${i}" ${done ? 'disabled' : ''}><span class="L">${'ABCD'[i]}</span>${t}</button>`).join('')}</div>
+  ${done ? `<div class="explain"><b>💡 ${a === r ? 'Correct!' : 'Not quite. The answer is ' + 'ABCD'[r] + '.'}</b>${ex}</div>` : ''}
+  <div class="row" style="margin-top:18px;justify-content:space-between"><button class="btn ghost" id="qPrev" ${qi === 0 ? 'disabled' : ''}>Previous</button><button class="btn" id="qNext" ${!done ? 'disabled' : ''}>${qi === Q.length - 1 ? 'See my score' : 'Next question'}</button></div>`;
+  c.querySelectorAll('.opt').forEach((b: HTMLElement) => b.onclick = () => { ans[qi] = +b.dataset.i!; store.set('gpu-ben-quiz', ans); quizPaint() }); $('#qPrev').onclick = () => { qi--; quizPaint() }; $('#qNext').onclick = () => { qi++; quizPaint() };
+}
+quizPaint();
+</script>

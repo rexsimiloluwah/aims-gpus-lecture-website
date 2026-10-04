@@ -1,0 +1,53 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Question from '../components/WorksheetQuestion.astro';
+import { worksheet } from '../data/worksheet';
+import { url } from '../lib/url';
+
+/* Question 3 (the plan builder) sits between questions 2 and 4. */
+const [q1, q2, q4] = worksheet.map((q, k) => ({ ...q, k }));
+---
+<BaseLayout title="Choose Your GPU worksheet" description="Plan a team's training run and deployment: calculate memory, time and cost, check your answers and build a GPU plan." current="worksheet">
+  <p class="kicker">Group activity: work in pairs</p>
+  <h1>Choose Your GPU</h1>
+  <p class="lede">Plan your team's training run and deployment. Show every calculation, then check your answers here.</p>
+  <div class="row" style="margin-bottom:18px"><a class="btn ghost" href={url('assets/downloads/GPUs_and_Model_Acceleration_Worksheet.pdf')} download>Download the printable worksheet (PDF)</a></div>
+  <div class="card" style="background:var(--yellow);border-color:transparent">
+    <p><b>Your team:</b> a startup in Cape Town building an LLM for a customer service assistant that classifies support tickets by urgency and responds to customers.</p>
+    <p><b>The job:</b> train a 1B parameter LLM on 20B tokens in bfloat16 with Adam, then deploy it. Training activations: 12 GB. Budget: $1,000. Deadline: 72 hours.</p>
+    <div class="tbl-wrap"><table class="data"><thead><tr><th>GPU</th><th>VRAM</th><th>Speed</th><th>Price per hour</th></tr></thead><tbody><tr><td>A</td><td>16 GB</td><td>100 TFLOPS</td><td>$1</td></tr><tr><td>B</td><td>40 GB</td><td>300 TFLOPS</td><td>$4</td></tr><tr><td>C</td><td>80 GB</td><td>1,000 TFLOPS</td><td>$10</td></tr></tbody></table></div>
+    <p class="hint" style="margin:10px 0 0">Hint: FLOPs = 6 × N × D. Assume 100% utilization and perfect scaling. 1B = 10⁹, 1 TFLOPS = 10¹² FLOPS, 1 hour = 3,600 s.</p>
+  </div>
+  <div id="wsBody">
+    {[q1, q2].map(q => <Question q={q} />)}
+    <div class="card ws-q"><h3 style="margin-top:0">3. What is your final training plan?</h3><p class="muted">Build a plan and see whether it meets the deadline and budget. Each GPU in a data-parallel plan holds the full model, and the batch is split between GPUs.</p>
+      <div class="ctl"><div><label for="plG">GPU type</label><select id="plG"><option value="16|100|1">A (16 GB, 100 TFLOPS, $1/h)</option><option value="40|300|4">B (40 GB, 300 TFLOPS, $4/h)</option><option value="80|1000|10">C (80 GB, 1,000 TFLOPS, $10/h)</option></select></div><div><label for="plN">How many GPUs <output id="plNo"></output></label><input type="range" id="plN" min="1" max="8" value="1"></div>
+        <div><label>Options</label><label style="font-weight:500;color:var(--ink)"><input type="checkbox" id="plGA"> Gradient accumulation (4 steps)</label><label style="font-weight:500;color:var(--ink)"><input type="checkbox" id="plE"> Realistic scaling (80% efficiency)</label></div></div>
+      <div class="readout"><div><small>Memory per GPU</small><strong id="plMem"></strong></div><div><small>Training time</small><strong id="plT"></strong></div><div><small>Total cost</small><strong id="plC"></strong></div></div><div class="verdict" id="plV"></div>
+      <div class="reflect"><b>💡 Reflect</b><br>What trade-off did you make to meet both the deadline and budget? Why do you think the trade-off makes sense?</div></div>
+    <Question q={q4} />
+  </div>
+</BaseLayout>
+
+<script>
+import { $, $$ } from '../scripts/lib';
+
+$('#wsBody').addEventListener('click', (e: Event) => {
+  const c = (e.target as HTMLElement).closest<HTMLElement>('[data-check]');
+  if (c) {
+    const k = +c.dataset.check!; let all = true;
+    $$(`#wsBody input[id^="ws${k}_"]`).forEach(i => { const a = +i.dataset.ans, v = parseFloat(i.value); const ok = !isNaN(v) && Math.abs(v - a) <= Math.max(0.05 * a, 0.06); i.classList.toggle('ok', ok); i.classList.toggle('no', !ok); if (!ok) all = false });
+    c.textContent = all ? 'All correct!' : 'Check again'; setTimeout(() => c.textContent = 'Check my answers', 2200);
+  }
+  const s = (e.target as HTMLElement).closest<HTMLElement>('[data-show]'); if (s) { const x = $('#wsx' + s.dataset.show); x.hidden = !x.hidden }
+});
+
+/* ---------- question 3: plan builder ---------- */
+function plan() {
+  const [vram, tf, price] = $('#plG').value.split('|').map(Number); const n = +$('#plN').value; const ga = $('#plGA').checked, eff = $('#plE').checked ? 0.8 : 1; $('#plNo').textContent = n;
+  const act = 12 / n / (ga ? 4 : 1); const mem = 8 + act; const h = 1.2e20 / (tf * 1e12 * n * eff) / 3600; const cost = h * n * price; $('#plMem').textContent = mem.toFixed(1) + ' GB'; $('#plT').textContent = h.toFixed(1) + ' h'; $('#plC').textContent = '$' + Math.round(cost);
+  const fits = mem <= vram, dl = h <= 72, bud = cost <= 1000; const v = $('#plV'); v.className = 'verdict ' + (fits && dl && bud ? 'ok' : 'bad');
+  v.textContent = !fits ? "Doesn't fit: " + mem.toFixed(1) + ' GB per GPU is more than ' + vram + ' GB. Add GPUs or gradient accumulation.' : (dl && bud) ? 'This plan fits, meets the 72-hour deadline and stays within $1,000.' : (!dl && !bud) ? 'Misses both the deadline and the budget.' : !dl ? 'Fits and is within budget, but misses the 72-hour deadline.' : 'Meets the deadline, but goes over the $1,000 budget.';
+}
+['plG', 'plN', 'plGA', 'plE'].forEach(i => $('#' + i).addEventListener('input', plan)); plan();
+</script>

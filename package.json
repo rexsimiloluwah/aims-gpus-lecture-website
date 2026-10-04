@@ -1,0 +1,16 @@
+{
+  "name": "gpu-learning-site",
+  "type": "module",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GPUs and Model Acceleration with Ben: an interactive course site",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "astro": "^7.3.5"
+  }
+}

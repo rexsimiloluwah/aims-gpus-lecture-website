@@ -1,0 +1,11 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Ben from '../components/Ben.astro';
+import { url } from '../lib/url';
+---
+<BaseLayout title="Page not found" current="404">
+  <p class="kicker">Error 404</p>
+  <h1>This page doesn't exist</h1>
+  <Ben img="ben_think" alt="Ben thinking"><p>I looked everywhere, even in HBM. Let's head back and pick up the journey from the start.</p></Ben>
+  <div class="row"><a class="btn" href={url()}>Back to home</a></div>
+</BaseLayout>

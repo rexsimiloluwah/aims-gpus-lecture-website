@@ -1,0 +1,42 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { slideSrc, slideTitles } from '../data/slides';
+import { url } from '../lib/url';
+---
+<BaseLayout title="Lecture slides" description="Browse all the lecture slides for GPUs and Inference Engineering, or download the deck as a PDF." current="slides" wide>
+  <p class="kicker">Lecture slides</p>
+  <h1>GPUs and Inference Engineering</h1>
+  <p class="lede">Browse the full deck. Use the arrow keys, or jump with the thumbnails.</p>
+  <div class="viewer">
+    <div class="screen"><img id="slideImg" src={url(slideSrc(1))} alt={`Slide 1: ${slideTitles[0]}`}></div>
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><button class="btn ghost" id="sPrev">Previous</button><button class="btn ghost" id="sNext">Next</button></div>
+      <div class="muted" id="sCount" aria-live="polite">Slide 1 of {slideTitles.length}</div>
+      <a class="btn" href={url('assets/downloads/GPUs_and_Inference_Engineering_Slides.pdf')} download>Download slides (PDF)</a>
+    </div>
+    <div class="thumbs" id="thumbs">
+      {slideTitles.map((t, i) => (
+        <button data-s={i} data-title={t} aria-label={`Slide ${i + 1}: ${t}`}><img src={url(slideSrc(i + 1))} alt="" loading="lazy"><span>{i + 1}. {t}</span></button>
+      ))}
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+import { $, $$, reduce } from '../scripts/lib';
+
+const thumbs = $('#thumbs'), buttons: HTMLElement[] = $$('#thumbs button'), img = $('#slideImg'); let cur = 0;
+function showSlide(i: number, scroll: ScrollBehavior = reduce ? 'auto' : 'smooth') {
+  cur = Math.max(0, Math.min(buttons.length - 1, i)); const t = buttons[cur];
+  img.src = t.querySelector('img')!.src; img.alt = 'Slide ' + (cur + 1) + ': ' + t.dataset.title; $('#sCount').textContent = 'Slide ' + (cur + 1) + ' of ' + buttons.length;
+  buttons.forEach(b => b.setAttribute('aria-current', String(b === t)));
+  /* Centre the thumbnail in its strip without scrolling the page. */
+  const d = t.getBoundingClientRect().left - thumbs.getBoundingClientRect().left - (thumbs.clientWidth - t.clientWidth) / 2; thumbs.scrollBy({ left: d, behavior: scroll });
+  /* Keep the slide number in the URL so it can be shared, e.g. slides/#12. */
+  history.replaceState(null, '', '#' + (cur + 1));
+}
+thumbs.addEventListener('click', (e: Event) => { const b = (e.target as HTMLElement).closest<HTMLElement>('button'); if (b) showSlide(+b.dataset.s!) });
+$('#sPrev').addEventListener('click', () => showSlide(cur - 1)); $('#sNext').addEventListener('click', () => showSlide(cur + 1));
+addEventListener('keydown', e => { if (e.key === 'ArrowRight') showSlide(cur + 1); if (e.key === 'ArrowLeft') showSlide(cur - 1) });
+showSlide((parseInt(location.hash.slice(1)) || 1) - 1, 'auto');
+</script>

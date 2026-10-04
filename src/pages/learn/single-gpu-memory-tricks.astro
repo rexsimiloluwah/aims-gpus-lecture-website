@@ -1,0 +1,85 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import { url } from '../../lib/url';
+---
+<ModuleLayout
+  id="m4"
+  heading="Pack the bag smarter: single-GPU tricks"
+  lede="Your GPU memory is a backpack. When it overflows, you can buy a bigger bag (expensive), pack smarter (this module), or share the load (Module 5)."
+>
+  <div class="grid2" style="align-items:center">
+    <figure class="card" style="display:grid;place-items:center;background:var(--stage)"><img src={url('assets/img/bag_full.webp')} alt="An open purple backpack holding books labelled Model Weights, Activations, Gradients and Optimizer States" style="max-height:300px"></figure>
+    <div class="grid2" style="grid-template-columns:1fr">
+      <div class="tile t-blue"><h4>Quantization</h4><p>Smaller items: paperbacks instead of hardcovers.</p></div>
+      <div class="tile t-sage"><h4>Mixed precision</h4><p>Mix sizes: full folders only for important documents.</p></div>
+      <div class="tile t-lav"><h4>Gradient accumulation</h4><p>Several smaller trips instead of one overloaded one.</p></div>
+    </div>
+  </div>
+
+  <h2>Quantization: keep fewer digits</h2>
+  <figure class="card" style="background:var(--stage)"><img src={url('assets/img/books.webp')} alt="Four large hardcover books become four small paperbacks" style="margin:auto;max-height:150px"></figure>
+  <p style="margin-top:16px">We already do this with π: 3.14159265 becomes 3.14. Quantization stores each weight with fewer bits, so it takes less memory and less time to move, at a small cost in accuracy.</p>
+  <Widget title="Same model, four formats" tag="Interactive" id="w-quant">
+    <div class="ctl"><div><label for="qN">Parameters <output id="qNo"></output></label><input type="range" id="qN" min="0" max="100" value="45"></div><div><label for="qV">GPU memory</label><select id="qV"><option value="16" selected>16 GB</option><option value="24">24 GB</option><option value="40">40 GB</option><option value="80">80 GB</option></select></div></div>
+    <div id="qBars" style="display:grid;gap:10px;margin-top:6px"></div>
+  </Widget>
+
+  <h2>Mixed precision: fast where we can, precise where we must</h2>
+  <figure class="card" style="background:var(--stage)"><img src={url('assets/img/folders.webp')} alt="Four big folders become two big folders for important documents and two compact ones" style="margin:auto;max-height:150px"></figure>
+  <p style="margin-top:16px">Most of the maths (forward and backward passes) runs in bfloat16. A float32 copy of the weights, the master weights, receives the updates. Why? Try it.</p>
+  <Widget title="Can a tiny update survive?" tag="Real bfloat16 rounding" id="w-mp">
+    <div class="ctl"><div><label for="mpW">Weight</label><input type="number" id="mpW" value="1" step="0.1"></div><div><label for="mpU">Update (learning rate × gradient)</label><input type="number" id="mpU" value="0.001" step="0.0001"></div></div>
+    <div class="readout"><div><small>float32 result</small><strong id="mp32"></strong></div><div><small>bfloat16 result</small><strong id="mp16"></strong></div></div>
+    <div class="verdict" id="mpV"></div>
+  </Widget>
+  <figure class="eq" aria-label="Weight update: w becomes w minus eta times gradient of L with respect to w">
+    <math display="block"><mrow><mi class="cg">w</mi><mo>←</mo><mi class="cg">w</mi><mo>−</mo><mi class="ct">η</mi><mo>·</mo><msub><mo class="co">∇</mo><mi class="co">w</mi></msub><mi class="co">L</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>w</b> master weight, kept in float32</span><span><i class="bg-t"></i><b>η</b> learning rate</span><span><i class="bg-o"></i><b>∇L</b> gradient, computed in bfloat16</span></figcaption>
+  </figure>
+
+  <h2>Gradient accumulation: several trips</h2>
+  <figure class="card" style="background:var(--stage)"><img src={url('assets/img/trips.webp')} alt="One full backpack becomes four smaller backpack trips" style="margin:auto;max-height:120px"></figure>
+  <Widget title="Batch of 64 on a GPU that fits 16" tag="Step through it" id="w-ga">
+    <div class="grid4" id="gaSteps"></div>
+    <div style="margin:16px 0 6px;font-size:14px;font-weight:600;color:var(--muted)">Accumulated gradient</div>
+    <div class="stack" style="height:26px"><span id="gaBar" style="width:0;background:var(--lav)"></span></div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="gaNext">Run micro-batch 1</button><button class="btn ghost" id="gaReset">Reset</button></div>
+    <div class="verdict mid" id="gaV">Each micro-batch computes gradients but doesn't update the weights yet.</div>
+  </Widget>
+  <div class="take">Gradient accumulation gives big-batch stability with small-batch memory. The cost is time: each update needs several forward and backward passes.</div>
+</ModuleLayout>
+
+<script>
+import { $, fmtNum, logScale } from '../../scripts/lib';
+
+/* ---------- quantization: same model, four formats ---------- */
+function quantCalc() {
+  const N = logScale(+$('#qN').value, 1e8, 4e11); const V = +$('#qV').value; $('#qNo').textContent = fmtNum(N);
+  const rows: [string, number][] = [['float32', 4], ['bfloat16', 2], ['int8', 1], ['int4', 0.5]]; const max = Math.max(N * 4 / 1e9, V) * 1.05;
+  $('#qBars').innerHTML = rows.map(([n, b]) => { const gb = N * b / 1e9; const fit = gb <= V; return `<div style="display:grid;grid-template-columns:90px minmax(0,1fr) 110px;gap:10px;align-items:center"><b style="font-size:14px">${n}</b><div class="stack" style="height:30px"><span style="width:${gb / max * 100}%;background:${fit ? '#BFE0B1' : '#F2B8B5'}"></span><i class="limit" data-l="" style="left:${V / max * 100}%"></i></div><span class="mono" style="font-size:14px">${gb.toFixed(1)} GB ${fit ? '✓' : '✗'}</span></div>` }).join('');
+}
+['qN', 'qV'].forEach(i => $('#' + i).addEventListener('input', quantCalc)); quantCalc();
+
+/* ---------- mixed precision: real bfloat16 rounding ---------- */
+const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+function toBf16(v: number) { f32[0] = v; let x = u32[0]; const lsb = (x >> 16) & 1; x = (x + 0x7FFF + lsb) & 0xFFFF0000; u32[0] = x >>> 0; return f32[0] }
+function mpCalc() {
+  const w = +$('#mpW').value, u = +$('#mpU').value; f32[0] = w + u; const r32 = f32[0]; const r16 = toBf16(toBf16(w) + toBf16(u));
+  $('#mp32').textContent = r32.toPrecision(7); $('#mp16').textContent = r16.toPrecision(7); const v = $('#mpV'); const lost = toBf16(w) === r16 && u !== 0;
+  if (lost) { v.className = 'verdict bad'; v.textContent = 'In bfloat16 the update vanished: ' + w + ' + ' + u + ' rounds back to ' + r16 + '. Do this for every weight and the model stops learning.' }
+  else { v.className = 'verdict ok'; v.textContent = 'The update survived in both formats here. Try a smaller update, like 0.001 on a weight of 1.' }
+}
+['mpW', 'mpU'].forEach(i => $('#' + i).addEventListener('input', mpCalc)); mpCalc();
+
+/* ---------- gradient accumulation ---------- */
+let ga = 0;
+function gaPaint() {
+  $('#gaSteps').innerHTML = [1, 2, 3, 4].map(i => `<div class="tile ${i <= ga ? 't-blue' : ''}" style="text-align:center"><h4 style="margin:0">Micro-batch ${i}</h4><p>16 examples${i <= ga ? '<br>gradients added' : ''}</p></div>`).join('');
+  $('#gaBar').style.width = (ga / 4 * 100) + '%'; $('#gaBar').textContent = ga ? ga * 16 + ' examples' : ''; const b = $('#gaNext'), v = $('#gaV');
+  if (ga < 4) { b.textContent = 'Run micro-batch ' + (ga + 1); v.className = 'verdict mid'; v.textContent = ga ? 'Gradients from ' + ga * 16 + ' examples added. Still no update.' : "Each micro-batch computes gradients but doesn't update the weights yet." }
+  else if (ga === 4) { b.textContent = 'Update the weights'; v.className = 'verdict mid'; v.textContent = 'All 64 examples processed with only 16 in memory at a time. Now update once.' }
+  else { b.textContent = 'Done'; b.disabled = true; v.className = 'verdict ok'; v.textContent = 'Weights updated once, exactly as if you had used a batch of 64. It took 4 forward and backward passes.' }
+}
+$('#gaNext').addEventListener('click', () => { if (ga < 5) ga++; gaPaint() }); $('#gaReset').addEventListener('click', () => { ga = 0; $('#gaNext').disabled = false; gaPaint() }); gaPaint();
+</script>

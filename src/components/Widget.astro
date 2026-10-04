@@ -1,0 +1,15 @@
+---
+interface Props {
+  title: string;
+  /** Small label on the right of the header, e.g. "Interactive". */
+  tag: string;
+  id?: string;
+  bodyId?: string;
+}
+
+const { title, tag, id, bodyId } = Astro.props;
+---
+<div class="widget" id={id}>
+  <div class="widget-h"><h3>{title}</h3><span class="tag">{tag}</span></div>
+  <div class="widget-b" id={bodyId}><slot /></div>
+</div>

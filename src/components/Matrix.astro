@@ -1,0 +1,11 @@
+---
+/** A small grid of coloured cells standing in for a matrix (tensor parallelism diagram). */
+interface Props {
+  rows: number;
+  cols: number;
+  color: string;
+}
+
+const { rows, cols, color } = Astro.props;
+---
+<span class="mat" style={`grid-template-columns:repeat(${cols},20px)`}>{Array.from({ length: rows * cols }, () => <i style={`background:${color}`}></i>)}</span>

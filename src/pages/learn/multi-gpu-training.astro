@@ -1,0 +1,133 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import Ben from '../../components/Ben.astro';
+import Matrix from '../../components/Matrix.astro';
+
+/* Tensor parallelism diagram: [GPU, first weight colour, second weight colour]. The input X is grey. */
+const X = 'var(--surface-2)';
+const tpRows = [['GPU 1', '#BFE0B1', '#D7C9F4'], ['GPU 2', '#F8CFA4', '#F2C6C3']];
+
+const strategies = ['Data parallelism', 'Tensor parallelism', 'Pipeline parallelism'];
+/** [scenario, index of the right strategy] */
+const scenarios: [string, number][] = [
+  ['A 1B model fits on one GPU, but training would take 6 months.', 0],
+  ['A 70B model: you put layers 1 to 40 on GPU 1 and layers 41 to 80 on GPU 2.', 2],
+  ["Each layer's matrix multiplication is split across the 8 GPUs inside one machine.", 1],
+];
+---
+<ModuleLayout
+  id="m5"
+  heading="Multi-GPU training: share the load"
+  lede="Sometimes one bag isn't enough. The model doesn't fit, or training would take months. Then we split the work, and the art is choosing what to split."
+>
+  <Ben img="ben_think" alt="Ben thinking"><p>If I give my friends part of the load, they have to <b>talk to each other</b>. So every strategy trades memory or time for <b>communication</b>.</p></Ben>
+
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>Strategy</th><th>What is split</th><th>Each GPU holds</th><th>Talks when</th><th>Use it when</th></tr></thead><tbody>
+    <tr><td><b>Data</b></td><td>The batch</td><td>A full copy of the model</td><td>After every step (gradients)</td><td>The model fits; training is too slow</td></tr>
+    <tr><td><b>ZeRO / FSDP</b></td><td>Optimizer states, gradients, weights</td><td>A slice of the training state</td><td>Every step, gathering slices</td><td>Training state doesn't fit</td></tr>
+    <tr><td><b>Tensor</b></td><td>Each layer's matrices</td><td>Part of every layer</td><td>Inside every layer</td><td>Layers are huge; GPUs share fast NVLink</td></tr>
+    <tr><td><b>Pipeline</b></td><td>The layers</td><td>A stage of consecutive layers</td><td>Between stages (activations)</td><td>The model is deep and spans machines</td></tr>
+  </tbody></table></div>
+
+  <h2>1. Data parallelism</h2>
+  <p>Every GPU gets a full copy of the model and a different slice of the batch. After the backward pass, the GPUs average their gradients with an <b>all-reduce</b>, so every copy takes the same update.</p>
+  <Widget title="Ring all-reduce" tag="Interactive" id="w-ring">
+    <div class="ctl"><div><label for="rG">GPUs <output id="rGo"></output></label><input type="range" id="rG" min="2" max="16" value="8"></div><div><label for="rP">Parameters <output id="rPo"></output></label><input type="range" id="rP" min="0" max="100" value="45"></div></div>
+    <div class="grid2" style="align-items:center"><div class="ring" id="ringSvg"></div>
+    <div class="readout" style="grid-template-columns:1fr"><div><small>Gradient size (bfloat16)</small><strong id="rM"></strong></div><div><small>Each GPU sends and receives per step</small><strong id="rS"></strong></div><div><small>Time per step over NVLink (900 GB/s)</small><strong id="rT"></strong></div></div></div>
+  </Widget>
+  <figure class="eq" aria-label="Data sent per GPU equals 2 times N minus 1 over N times M">
+    <math display="block"><mrow><mtext>Data per GPU</mtext><mo>=</mo><mn class="cv">2</mn><mfrac><mrow><mi class="cb">G</mi><mo>−</mo><mn>1</mn></mrow><mi class="cb">G</mi></mfrac><mo>×</mo><mi class="cg">M</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>2</b> reduce-scatter, then all-gather</span><span><i class="bg-b"></i><b>G</b> GPUs</span><span><i class="bg-g"></i><b>M</b> gradient size in bytes</span></figcaption>
+  </figure>
+  <p>The volume per GPU barely changes as you add GPUs: it approaches 2M. But every step must wait for it, which is why 8 GPUs rarely give 8× the speed.</p>
+
+  <h2>2. ZeRO and FSDP: stop storing copies</h2>
+  <p>Plain data parallelism stores the full training state on every GPU. With mixed-precision Adam that is about <b>16 bytes per parameter</b>: 2 for bfloat16 weights, 2 for gradients and 12 for float32 master weights and Adam's two states. ZeRO shards this state across GPUs instead.</p>
+  <Widget title="Memory per GPU with ZeRO" tag="Interactive" id="w-zero">
+    <div class="ctl"><div><label for="zP">Parameters <output id="zPo"></output></label><input type="range" id="zP" min="0" max="100" value="60"></div><div><label for="zG">GPUs <output id="zGo"></output></label><input type="range" id="zG" min="1" max="64" value="8"></div></div>
+    <div id="zBars" style="display:grid;gap:10px"></div>
+    <p class="hint">Stage 1 shards optimizer states, stage 2 adds gradients, stage 3 (like PyTorch FSDP) adds the weights. Activations are extra.</p>
+  </Widget>
+  <figure class="eq" aria-label="ZeRO stage 3 memory per GPU equals 16 times psi over G">
+    <math display="block"><mrow><msub><mtext>Memory</mtext><mtext>ZeRO-3</mtext></msub><mo>≈</mo><mfrac><mrow><mn class="cv">16</mn><mo>×</mo><mi class="cg">Ψ</mi></mrow><mi class="cb">G</mi></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>16</b> bytes per parameter of training state</span><span><i class="bg-g"></i><b>Ψ</b> parameters</span><span><i class="bg-b"></i><b>G</b> GPUs sharing it</span></figcaption>
+  </figure>
+
+  <h2>3. Tensor parallelism: split each layer</h2>
+  <p>A single matrix multiplication is split across GPUs. In a transformer MLP, the first weight matrix is split by <b>columns</b> and the second by <b>rows</b>, so each GPU computes its half end to end and the GPUs only need one all-reduce at the end of the block.</p>
+  <div class="card" id="tpDiagram" style="overflow-x:auto">
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:center;min-width:560px">
+      {tpRows.map(([gpu, w1, w2]) => (
+        <Fragment><b>{gpu}</b><div class="row"><Matrix rows={2} cols={4} color={X} /> <span>×</span> <Matrix rows={4} cols={2} color={w1} /> <span>=</span> <Matrix rows={2} cols={2} color={w1} /> <span class="muted">→ MLP ×</span> <Matrix rows={2} cols={4} color={w2} /> <span>=</span> <Matrix rows={2} cols={4} color={w2} /> <span class="muted">partial sum</span></div></Fragment>
+      ))}
+      <span></span><div class="verdict mid" style="margin:0">All-reduce: add the two partial sums → the same output as one big GPU</div>
+    </div>
+    <p class="figcap">The input X (grey) is copied to both GPUs. The first weight matrix is split by columns (green on GPU 1, orange on GPU 2), the second by rows, so each GPU finishes its half before one all-reduce.</p>
+  </div>
+  <p style="margin-top:14px">Because GPUs talk inside every layer, tensor parallelism needs very fast links. It is usually kept within one machine, where GPUs share NVLink at around 900 GB/s, rather than across machines on a network that is often 10 to 20 times slower.</p>
+
+  <h2>4. Pipeline parallelism: split the layers</h2>
+  <p>Consecutive layers become stages on different GPUs, like an assembly line. To keep everyone busy, the batch is cut into <b>micro-batches</b>. The idle gaps at the start and end are called the <b>bubble</b>.</p>
+  <Widget title="Pipeline schedule" tag="Interactive" id="w-pipe">
+    <div class="ctl"><div><label for="pS">Stages (GPUs) <output id="pSo"></output></label><input type="range" id="pS" min="2" max="6" value="4"></div><div><label for="pM">Micro-batches <output id="pMo"></output></label><input type="range" id="pM" min="1" max="12" value="4"></div></div>
+    <div class="gantt" id="gantt"></div>
+    <div class="row" style="margin-top:10px;font-size:13px;color:var(--muted)"><span class="pill" style="background:var(--blue-soft);color:var(--blue-ink)">F forward</span><span class="pill" style="background:var(--sage);color:var(--sage-ink)">B backward</span><span class="pill">hatched: idle bubble</span></div>
+    <div class="verdict mid" id="pV"></div>
+  </Widget>
+  <figure class="eq" aria-label="Bubble fraction equals p minus 1 over m plus p minus 1">
+    <math display="block"><mrow><mtext>Bubble fraction</mtext><mo>=</mo><mfrac><mrow><mi class="cb">p</mi><mo>−</mo><mn>1</mn></mrow><mrow><mi class="cg">m</mi><mo>+</mo><mi class="cb">p</mi><mo>−</mo><mn>1</mn></mrow></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-b"></i><b>p</b> pipeline stages</span><span><i class="bg-g"></i><b>m</b> micro-batches</span></figcaption>
+  </figure>
+
+  <h2>Putting it together: 3D parallelism</h2>
+  <p>The largest models combine all three: tensor parallelism inside each machine, pipeline parallelism across machines, and data parallelism across copies of the whole setup. The design goal is always the same: keep the chattiest communication on the fastest links.</p>
+  <Widget title="Which strategy fits?" tag="Quick check" bodyId="stratQ">
+    {scenarios.map(([q, answer], k) => (
+      <div style="margin-bottom:16px"><p style="font-weight:600;margin-bottom:8px">{k + 1}. {q}</p><div class="row" data-answer={answer}>
+        {strategies.map((n, i) => <button class="opt" style="padding:7px 16px 7px 7px;font-size:15px" data-i={i}><span class="L" style="width:28px;height:28px">{"ABC"[i]}</span>{n}</button>)}
+      </div></div>
+    ))}
+  </Widget>
+  <div class="take">More GPUs means more communication. Choose the strategy that splits what is too big, and keep the talking on the fastest links.</div>
+</ModuleLayout>
+
+<script>
+import { $, $$, answerOpts, fmtBytes, fmtNum, logScale, reduce } from '../../scripts/lib';
+
+/* ---------- ring all-reduce ---------- */
+function ringCalc() {
+  const G = +$('#rG').value, P = logScale(+$('#rP').value, 1e8, 4e11); $('#rGo').textContent = G; $('#rPo').textContent = fmtNum(P);
+  const M = P * 2, S = 2 * (G - 1) / G * M; $('#rM').textContent = fmtBytes(M); $('#rS').textContent = fmtBytes(S); $('#rT').textContent = (S / 900e9 * 1000).toFixed(S / 900e9 < 0.1 ? 1 : 0) + ' ms';
+  const R = 120, cx = 160, cy = 150; let s = `<svg viewBox="0 0 320 300" role="img" aria-label="${G} GPUs arranged in a ring, each passing gradient chunks to the next">`;
+  for (let i = 0; i < G; i++) {
+    const a1 = i / G * 2 * Math.PI - Math.PI / 2, a2 = (i + 1) / G * 2 * Math.PI - Math.PI / 2; const x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1), x2 = cx + R * Math.cos(a2), y2 = cy + R * Math.sin(a2);
+    s += `<path d="M${x1} ${y1} A${R} ${R} 0 0 1 ${x2} ${y2}" fill="none" stroke="var(--eq-teal)" stroke-width="2.5" stroke-dasharray="6 5"><animate attributeName="stroke-dashoffset" from="22" to="0" dur="1s" repeatCount="${reduce ? 0 : 'indefinite'}"/></path>`;
+  }
+  for (let i = 0; i < G; i++) { const a = i / G * 2 * Math.PI - Math.PI / 2, x = cx + R * Math.cos(a), y = cy + R * Math.sin(a); s += `<g><rect x="${x - 17}" y="${y - 13}" width="34" height="26" rx="7" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/><text x="${x}" y="${y + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--blue-ink)">GPU${i + 1}</text></g>` }
+  s += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="13" font-weight="700" fill="var(--ink)">each GPU passes</text><text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="13" fill="var(--muted)">chunks to its neighbour</text></svg>`; $('#ringSvg').innerHTML = s;
+}
+['rG', 'rP'].forEach(i => $('#' + i).addEventListener('input', ringCalc)); ringCalc();
+
+/* ---------- ZeRO memory per GPU ---------- */
+function zeroCalc() {
+  const P = logScale(+$('#zP').value, 1e8, 2e12), G = +$('#zG').value; $('#zPo').textContent = fmtNum(P); $('#zGo').textContent = G;
+  const st: [string, number][] = [['No sharding', 16], ['ZeRO-1', 4 + 12 / G], ['ZeRO-2', 2 + 14 / G], ['ZeRO-3 / FSDP', 16 / G]]; const max = 16 * P / 1e9;
+  $('#zBars').innerHTML = st.map(([n, bpp]) => { const gb = bpp * P / 1e9; const fit = gb <= 80; return `<div style="display:grid;grid-template-columns:120px minmax(0,1fr) 120px;gap:10px;align-items:center"><b style="font-size:14px">${n}</b><div class="stack" style="height:28px"><span style="width:${Math.max(gb / max * 100, 0.6)}%;background:${fit ? '#BFE0B1' : '#F2B8B5'}"></span></div><span class="mono" style="font-size:14px">${fmtBytes(gb * 1e9)} ${fit ? '✓' : '✗'}</span></div>` }).join('') + `<p class="hint" style="margin:2px 0 0">✓ fits on one 80 GB GPU, before activations.</p>`;
+}
+['zP', 'zG'].forEach(i => $('#' + i).addEventListener('input', zeroCalc)); zeroCalc();
+
+/* ---------- pipeline schedule ---------- */
+function pipeCalc() {
+  const p = +$('#pS').value, m = +$('#pM').value; $('#pSo').textContent = p; $('#pMo').textContent = m; const T = 2 * (m + p - 1); const grid: ([string, number] | null)[][] = [];
+  for (let s = 0; s < p; s++) { const row = new Array(T).fill(null); for (let i = 0; i < m; i++) { row[s + i] = ['f', i + 1]; row[(m + p - 1) + (p - 1 - s) + i] = ['b', i + 1] } grid.push(row) }
+  const g = $('#gantt'); g.style.gridTemplateColumns = `70px repeat(${T},minmax(22px,1fr))`;
+  g.innerHTML = grid.map((row, s) => `<div class="lbl">GPU ${s + 1}</div>` + row.map(c => c ? `<div class="c ${c[0]}">${c[0].toUpperCase()}${c[1]}</div>` : `<div class="c e"></div>`).join('')).join('');
+  const bub = (p - 1) / (m + p - 1); $('#pV').textContent = `Bubble: ${(bub * 100).toFixed(0)}% of the time each GPU sits idle. ${m < 4 * p ? 'Add more micro-batches to shrink it.' : 'Plenty of micro-batches: the bubble is small.'}`;
+}
+['pS', 'pM'].forEach(i => $('#' + i).addEventListener('input', pipeCalc)); pipeCalc();
+
+/* ---------- which strategy fits? ---------- */
+$$('#stratQ .row').forEach(r => answerOpts(r, +r.dataset.answer));
+</script>

@@ -1,0 +1,133 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import Ben from '../../components/Ben.astro';
+import Icon from '../../components/Icon.astro';
+---
+<ModuleLayout
+  id="m1"
+  heading="Why GPUs power modern AI"
+  lede="Every model you use, from chatbots to image generators, runs on GPUs. The reason is simple once you see the shape of the work."
+>
+  <Widget title="Who would you hire?" tag="Try it">
+    <p>You need to solve <b>1,000,000</b> simple sums like 2 × 8 + 5. A world-class mathematician takes 1 second per sum. A high-school student takes 3 seconds.</p>
+    <div class="grid2" id="hireQ">
+      <button class="opt" data-i="0"><span class="L">A</span>4 world-class mathematicians</button>
+      <button class="opt" data-i="1"><span class="L">B</span>1,000 high-school students</button>
+    </div>
+    <div id="hireOut" class="explain" hidden></div>
+  </Widget>
+
+  <h2>CPU vs GPU</h2>
+  <div class="grid2">
+    <div class="tile t-lav"><h4>CPU: a few brilliant experts</h4><p>A handful of powerful cores, each built to finish one complicated, step-by-step task as quickly as possible. Perfect for your operating system, browser, database and Python code.</p></div>
+    <div class="tile t-blue"><h4>GPU: an army of workers</h4><p>Thousands of simpler cores built to do the same simple maths on lots of data at the same time. First built to colour millions of pixels at once, now the engine of AI.</p></div>
+  </div>
+  <div class="tbl-wrap" style="margin-top:16px"><table class="data"><thead><tr><th></th><th>CPU</th><th>GPU</th></tr></thead><tbody>
+    <tr><td><b>Cores</b></td><td>About 4 to 128 powerful cores</td><td>Thousands of simple cores (an H100 has 16,896 CUDA cores)</td></tr>
+    <tr><td><b>Built for</b></td><td>Low latency: finish each task fast</td><td>High throughput: finish lots of tasks together</td></tr>
+    <tr><td><b>Great at</b></td><td>Branching logic, tasks that depend on the previous step</td><td>The same operation on huge arrays of numbers</td></tr>
+    <tr><td><b>In AI</b></td><td>Loads data, runs the training loop, coordinates</td><td>Does the heavy maths: matrix multiplications</td></tr>
+  </tbody></table></div>
+  <p style="margin-top:16px">They work as a team. The CPU is the manager that prepares data and tells the GPU what to do. The GPU is the factory floor that does the maths.</p>
+
+  <h2>Why GPUs Matter in Modern AI: Matrix Multiplication</h2>
+  <p>Inside a neural network, almost everything is a <b>tensor</b>: a grid of numbers with one, two or more dimensions. Inputs, weights, activations and embeddings are all tensors, and a model's layers mostly multiply tensors together.</p>
+  <figure class="eq" aria-label="Each output y i is the sum over j of W i j times x j">
+    <math display="block"><mrow><msub><mi class="cgr">y</mi><mi>i</mi></msub><mo>=</mo><munder><mo>∑</mo><mi>j</mi></munder><msub><mi class="cg">W</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>×</mo><msub><mi class="ct">x</mi><mi>j</mi></msub></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>W</b> weights</span><span><i class="bg-t"></i><b>x</b> inputs</span><span><i class="bg-gr"></i><b>y</b> outputs: each one is independent of the others</span></figcaption>
+  </figure>
+  <Widget title="Watch two matrices multiply" tag="Animation" id="w-mm">
+    <div class="row" style="margin-bottom:14px"><div class="seg" id="mmMode"><button aria-pressed="true" data-v="cpu">One at a time (CPU)</button><button aria-pressed="false" data-v="gpu">All at once (GPU)</button></div></div>
+    <div class="mm" aria-hidden="true"><div class="mm-m" id="mmA"></div><span class="mm-op">×</span><div class="mm-m" id="mmB"></div><span class="mm-op">=</span><div class="mm-m" id="mmC"></div></div>
+    <p class="mm-calc mono" id="mmCalc" aria-live="polite"></p>
+    <p class="hint">Each output cell is a row of A times a column of B. No cell needs another cell's answer, so a GPU can compute all of them at the same time.</p>
+  </Widget>
+  <p>Multiplying a 4,096 × 4,096 weight matrix by one input vector takes about 16.8 million multiply-and-adds, and none of the outputs depends on another. A CPU works through them a few at a time. A GPU hands them out to thousands of cores at once.</p>
+
+  <h2>Inside an NVIDIA GPU</h2>
+  <p>A GPU is organised in layers, like a company with departments and teams.</p>
+  <div class="hier">
+    <div class="lvl" style="background:var(--surface)"><b>The GPU</b>
+      <div class="inner">
+        <div class="tile t-blue"><h4>Streaming Multiprocessors (SMs)</h4><p>The departments. An H100 has 132 of them, each running many calculations at once.</p></div>
+        <div class="tile t-sage"><h4>CUDA cores</h4><p>Inside each SM: general-purpose units that multiply and add.</p></div>
+        <div class="tile t-lav"><h4>Tensor Cores</h4><p>Specialists for matrix multiplication, built for low precision like BF16 and FP8. They do most of the work in AI.</p></div>
+        <div class="tile t-peach"><h4>HBM (VRAM)</h4><p>High Bandwidth Memory stacked next to the chip. Holds the model and its data.</p></div>
+      </div>
+    </div>
+  </div>
+  <h3>How work is split up</h3>
+  <div class="flow"><div class="node" style="background:var(--surface-2)">PyTorch operation</div><span class="arr">→</span><div class="node" style="background:var(--blue-soft);color:var(--blue-ink)">CUDA kernel<br><small>a function that runs on the GPU</small></div><span class="arr">→</span><div class="node" style="background:var(--sage);color:var(--sage-ink)">Thousands of threads<br><small>tiny units of work</small></div><span class="arr">→</span><div class="node" style="background:var(--lav);color:var(--lav-ink)">Warps of 32 threads<br><small>run each instruction together</small></div></div>
+  <p class="hint">You rarely write kernels yourself: PyTorch and NVIDIA's libraries launch them for you. But this picture explains why GPUs love big, regular blocks of work.</p>
+
+  <h3>The memory ladder</h3>
+  <p>Not all GPU memory is equal. The closer memory sits to the cores, the faster and smaller it is.</p>
+  <div class="ladder">
+    <div class="t-sage"><b>Registers</b><span>Inside each core; holds the numbers being worked on right now</span><em>fastest, tiniest</em></div>
+    <div class="t-lav"><b>L1 / shared memory (SRAM)</b><span>Inside each SM; FlashAttention keeps its tiles here</span><em>very fast, KBs per SM</em></div>
+    <div class="t-blue"><b>L2 cache</b><span>Shared across the whole chip</span><em>fast, tens of MB</em></div>
+    <div class="t-peach"><b>HBM (VRAM)</b><span>Where the model and its data live</span><em>slowest, 16 to 192 GB</em></div>
+  </div>
+  <p style="margin-top:14px"><b>Capacity</b> is how many boxes the warehouse holds. <b>Bandwidth</b> is how fast boxes move in and out. AI needs both, and running out of the first is the famous <span class="mono">CUDA out of memory</span> error.</p>
+
+  <h3>Connecting GPUs</h3>
+  <div class="grid2">
+    <div class="tile t-blue"><h4>PCIe</h4><p>The standard road between devices in a computer. Fine for one GPU; slow for GPUs that constantly swap data.</p></div>
+    <div class="tile t-sage"><h4>NVLink and NVSwitch</h4><p>NVIDIA's high-speed highways between GPUs, around 900 GB/s on an H100. Essential for multi-GPU training (Module 5).</p></div>
+  </div>
+
+  <h2>Meet some real GPUs</h2>
+  <p>You will see these names in papers, cloud consoles and job adverts. The numbers are approximate and vary by version.</p>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>GPU</th><th>Generation</th><th>Memory</th><th>Bandwidth</th><th>Known for</th></tr></thead><tbody>
+    <tr><td><b>T4</b></td><td>Turing (2018)</td><td>16 GB</td><td>~320 GB/s</td><td>The free GPU in Google Colab; great for learning and small inference</td></tr>
+    <tr><td><b>RTX 4090</b></td><td>Ada Lovelace (2022)</td><td>24 GB</td><td>~1 TB/s</td><td>A consumer gaming card that many researchers use on a desk</td></tr>
+    <tr><td><b>V100</b></td><td>Volta (2017)</td><td>16 or 32 GB</td><td>~900 GB/s</td><td>The first GPU with Tensor Cores</td></tr>
+    <tr><td><b>A100</b></td><td>Ampere (2020)</td><td>40 or 80 GB</td><td>1.6 to 2 TB/s</td><td>The workhorse of large-scale AI for years; 312 TFLOPS in BF16</td></tr>
+    <tr><td><b>H100</b></td><td>Hopper (2022)</td><td>80 GB</td><td>~3.35 TB/s</td><td>Built for transformers: FP8 and the Transformer Engine; about 990 TFLOPS in BF16</td></tr>
+    <tr><td><b>H200</b></td><td>Hopper (2024)</td><td>141 GB</td><td>~4.8 TB/s</td><td>An H100 with much more and faster memory, ideal for big models</td></tr>
+    <tr><td><b>B200</b></td><td>Blackwell (2024)</td><td>192 GB</td><td>~8 TB/s</td><td>The newest generation: more compute, memory and FP4 support</td></tr>
+  </tbody></table></div>
+  <p style="margin-top:14px">NVIDIA isn't the only option. <b>AMD</b> makes data-centre GPUs like the MI300X (192 GB of HBM), and <b>Google's TPUs</b> are AI accelerators built around the same idea: lots of parallel matrix maths fed by fast memory. Each generation moves in the same direction: more compute, more memory, more bandwidth, faster links and lower precision.</p>
+
+  <h2>The GPU system in one picture</h2>
+  <div class="grid3">
+    <div class="tile t-sage"><div class="ic"><Icon name="chip" /></div><h4>Compute cores</h4><p>The workers. They do the calculations in parallel.</p></div>
+    <div class="tile t-blue"><div class="ic"><Icon name="database" /></div><h4>VRAM (HBM)</h4><p>The warehouse. On AI GPUs this is HBM, the High Bandwidth Memory stacked next to the chip. It holds parameters, activations and everything else the model needs.</p></div>
+    <div class="tile t-peach"><div class="ic"><Icon name="arrows" /></div><h4>Memory bandwidth</h4><p>The conveyor belt. Moves data between memory and the cores.</p></div>
+  </div>
+  <div class="take">A GPU is only as fast as its slowest part. Cores, memory and the conveyor belt all have to keep up.</div>
+
+  <Ben img="ben_idea" alt="Ben with an idea"><p>So a GPU isn't "faster" at everything. It's faster at <b>lots of simple maths at once</b>, which is what AI needs. Next question: how much maths, and how much memory?</p></Ben>
+</ModuleLayout>
+
+<script>
+import { $, answerOpts, reduce, seg } from '../../scripts/lib';
+
+/* ---------- who would you hire? ---------- */
+answerOpts($('#hireQ'), 1, () => {
+  const o = $('#hireOut'); o.hidden = false;
+  o.innerHTML = "<b>💡 The students win, easily.</b>Mathematicians: 1,000,000 ÷ 4 × 1 s = 250,000 s, about <b>69 hours</b>. Students: 1,000,000 ÷ 1,000 × 3 s = 3,000 s, about <b>50 minutes</b>. Many simple workers beat a few brilliant ones when the tasks don't depend on each other. That's a GPU.";
+});
+
+/* ---------- matrix multiplication animation ---------- */
+const A = [[2, 0, 1], [1, 3, 2], [0, 1, 4]], B = [[1, 2, 0], [3, 1, 2], [2, 0, 1]];
+const C = A.map(r => B[0].map((_, j) => r.reduce((s, v, k) => s + v * B[k][j], 0)));
+const fill = (id: string, M: number[][]) => { $('#' + id).innerHTML = M.flat().map(v => `<i>${v}</i>`).join('') }; fill('mmA', A); fill('mmB', B); fill('mmC', C);
+const a: HTMLElement[] = [...$('#mmA').children], b: HTMLElement[] = [...$('#mmB').children], c: HTMLElement[] = [...$('#mmC').children], out = $('#mmCalc');
+let timer: ReturnType<typeof setInterval> | undefined, step = 0;
+const mode = seg('mmMode', () => start());
+function clear() { [...a, ...b, ...c].forEach(x => x.className = '') }
+function cell(i: number, j: number, cls: string) { for (let k = 0; k < 3; k++) { a[i * 3 + k].classList.add('on'); b[k * 3 + j].classList.add('on') } c[i * 3 + j].classList.add(cls) }
+function tick() {
+  const gpu = mode() === 'gpu';
+  if (gpu) { if (step === 0) { clear(); out.textContent = 'Every core takes one cell...' } else if (step === 1) { for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cell(i, j, 'on'); out.textContent = 'All 9 cells computed in one step' } else if (step === 2) { clear(); c.forEach(x => x.classList.add('done')) } step = (step + 1) % 4; return }
+  if (step < 9) {
+    const i = Math.floor(step / 3), j = step % 3; [...a, ...b].forEach(x => x.className = ''); c.forEach((x, n) => { x.className = n < step ? 'done' : '' }); cell(i, j, 'on');
+    out.textContent = `C[${i + 1},${j + 1}] = ${A[i].map((v, k) => v + '×' + B[k][j]).join(' + ')} = ${C[i][j]}`;
+  } else { clear(); c.forEach(x => x.classList.add('done')); out.textContent = '9 cells, one after another: 9 steps' }
+  step = (step + 1) % 11;
+}
+function start() { clearInterval(timer); step = 0; clear(); if (reduce) { c.forEach(x => x.classList.add('done')); out.textContent = 'C = A × B'; return } tick(); timer = setInterval(tick, mode() === 'gpu' ? 1100 : 950) }
+start();
+</script>

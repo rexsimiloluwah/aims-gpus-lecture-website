@@ -1,0 +1,78 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Ben from '../components/Ben.astro';
+import Icon from '../components/Icon.astro';
+import { modules, modulePath } from '../data/modules';
+import { quiz } from '../data/quiz';
+import { site } from '../data/site';
+import { slideTitles } from '../data/slides';
+import { url } from '../lib/url';
+
+/* The site used to be one page with hash routes (#m1, #quiz, ...). Send old links to the new pages. */
+const legacy = Object.fromEntries([
+  ...modules.map(m => [m.id, url(modulePath(m))]),
+  ...['slides', 'quiz', 'worksheet', 'resources'].map(p => [p, url(`${p}/`)]),
+]);
+---
+<BaseLayout current="home">
+  <script is:inline define:vars={{ legacy }}>
+    const to = legacy[location.hash.slice(1)];
+    if (to) location.replace(to);
+  </script>
+
+  <div class="hero">
+    <div>
+      <p class="kicker">AI Research Foundations</p>
+      <h1>Make AI models fit, run fast and cost less</h1>
+      <p class="lede">A hands-on guide to GPUs: how to measure compute and memory, find the bottleneck, and use the tricks real teams use to train and serve models.</p>
+      <div class="row" style="margin-top:18px">
+        <a class="btn" href={url(modulePath(modules[0]))}>Start with Module 1</a>
+        <a class="btn ghost" href={url('quiz/')}>Test yourself first</a>
+      </div>
+    </div>
+    <div class="die-wrap" role="img" aria-label="An animated GPU chip with thousands of cores lighting up in parallel, with Ben watching">
+      <span class="die-label">Thousands of cores, working at once</span>
+      <canvas id="die" width="600" height="480"></canvas>
+      <img class="ben-hero" src={url('assets/img/ben_think.webp')} alt="">
+    </div>
+  </div>
+
+  <Ben img="ben_stand" alt="Ben, the learner"><p>Hi, I'm <b>Ben</b>. I've heard "you need GPUs for AI" a hundred times, but I couldn't tell you why, how much memory a model needs, or why my training run crashed. Let's figure it out together, one idea at a time.</p></Ben>
+
+  <h2>Your journey</h2>
+  <div class="journey" id="journey">
+    {modules.map(m => (
+      <a href={url(modulePath(m))} data-m={m.id}><span class="n">Module {m.n}</span><h4>{m.title}</h4><p>{m.blurb}</p></a>
+    ))}
+  </div>
+
+  <h2>Practise and go further</h2>
+  <div class="grid3">
+    <a class="tile t-blue" href={url('quiz/')} style="text-decoration:none;color:inherit"><h4>Quiz</h4><p>{quiz.length} questions with instant feedback and explanations.</p></a>
+    <a class="tile t-sage" href={url('worksheet/')} style="text-decoration:none;color:inherit"><h4>Choose Your GPU</h4><p>The group worksheet, with answer checks and a plan builder.</p></a>
+    <a class="tile t-lav" href={url('slides/')} style="text-decoration:none;color:inherit"><h4>Lecture slides</h4><p>Browse all {slideTitles.length} slides or download the deck.</p></a>
+  </div>
+
+  <h2>Open source</h2>
+  <a class="feature" href={site.repoUrl} target="_blank" rel="noopener">
+    <span><p class="tagline">Built in the open</p><h3>See how this course is made</h3><p>Every module, calculator and quiz question lives in a public GitHub repository. Read the code, report a mistake or suggest a new question.</p><span class="url">github.com/{site.repo}</span></span>
+    <span class="btn"><Icon name="github" /> View on GitHub</span>
+  </a>
+</BaseLayout>
+
+<script>
+import { $, reduce } from '../scripts/lib';
+
+/* ---------- hero: GPU die lighting up in waves ---------- */
+const c = $('#die') as HTMLCanvasElement, x = c.getContext('2d')!; const cols = 20, rows = 14; const t0 = performance.now();
+function draw(t: number) {
+  const W = c.width, H = c.height, cw = W / cols, ch = H / rows; x.clearRect(0, 0, W, H);
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    const d = Math.hypot(i - cols / 2, j - rows / 2); const ph = reduce ? 0.6 : (Math.sin((t - t0) / 420 - d * 0.55) + 1) / 2;
+    const a = 0.18 + 0.82 * Math.pow(ph, 3); x.fillStyle = `rgba(${Math.round(70 + 60 * a)},${Math.round(120 + 70 * a)},${Math.round(230 + 25 * a)},${0.25 + 0.75 * a})`;
+    const r = 4; const px = i * cw + 3, py = j * ch + 3, w = cw - 6, h = ch - 6; x.beginPath(); x.moveTo(px + r, py); x.arcTo(px + w, py, px + w, py + h, r); x.arcTo(px + w, py + h, px, py + h, r); x.arcTo(px, py + h, px, py, r); x.arcTo(px, py, px + w, py, r); x.fill();
+  }
+  if (!reduce && performance.now() - t0 < 9000) requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+</script>

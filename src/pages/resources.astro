@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Ben from '../components/Ben.astro';
+import Icon from '../components/Icon.astro';
+import { modules, modulePath } from '../data/modules';
+import { quiz } from '../data/quiz';
+import { links, mainCourse, papers } from '../data/resources';
+import { slideTitles } from '../data/slides';
+import { url } from '../lib/url';
+---
+<BaseLayout title="Resources" description="The slides, worksheet and quiz from the session, plus the best places to go deeper on GPUs and inference." current="resources">
+  <p class="kicker">Keep learning</p>
+  <h1>Resources</h1>
+  <p class="lede">Everything from the session, plus the best places to go deeper.</p>
+  <a class="feature" href={mainCourse.url} target="_blank" rel="noopener">
+    <span><p class="tagline">Main course resource</p><h3>{mainCourse.title}</h3><p>{mainCourse.description}</p><span class="url">{mainCourse.url.replace(/^https?:\/\/(www\.)?/, '')}</span></span>
+    <span class="btn">Open the course</span>
+  </a>
+  <h2 style="margin-top:40px">Session materials</h2>
+  <div class="res">
+    <a href={url('slides/')}><span class="ic t-lav"><Icon name="monitor" /></span><span><h4>Lecture slides</h4><p>Browse all {slideTitles.length} slides online or download the PDF.</p></span></a>
+    <a href={url('worksheet/')}><span class="ic t-sage"><Icon name="pencil" /></span><span><h4>Choose Your GPU worksheet</h4><p>Interactive answer checks and a printable PDF.</p></span></a>
+    <a href={url('quiz/')}><span class="ic t-blue"><Icon name="check" /></span><span><h4>Quiz</h4><p>{quiz.length} questions with explanations.</p></span></a>
+    <a href={url(modulePath(modules[0]))}><span class="ic t-peach"><Icon name="route" /></span><span><h4>Learning modules</h4><p>Six interactive modules with calculators.</p></span></a>
+  </div>
+  <h2>Go deeper</h2>
+  <div class="res" id="extLinks">
+    {links.map(l => (
+      <a href={l.url} target="_blank" rel="noopener"><span class={`ic ${l.tint}`}><Icon name="link" /></span><span><h4>{l.title}</h4><p>{l.description}</p><span class="url">{l.url.replace(/^https?:\/\//, '')}</span></span></a>
+    ))}
+  </div>
+  <h2>Key papers</h2>
+  <ul class="papers" id="papers">
+    {papers.map(([title, authors, id]) => <li><a href={`https://arxiv.org/abs/${id}`} target="_blank" rel="noopener">{title}</a> <span class="muted">{authors}</span></li>)}
+  </ul>
+  <Ben img="ben_heart" alt="Ben making a heart with his hands" style="margin-top:46px"><p>Thank you for learning with me! From "why GPUs?" to serving real users: you've got this. Come back any time to try the calculators again.</p></Ben>
+</BaseLayout>

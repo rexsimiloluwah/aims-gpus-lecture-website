@@ -1,0 +1,98 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import Ben from '../../components/Ben.astro';
+---
+<ModuleLayout
+  id="m6"
+  heading="Inference engineering: serving real users"
+  lede="Training happens once. Inference happens every time someone sends a message, millions of times a day. For popular models, serving can cost more than training over the model's lifetime."
+>
+  <h2>Two phases of every request</h2>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Prefill: read the prompt</h4><p>All prompt tokens are processed in parallel in one big pass. Lots of maths per byte, so it is <b>compute-bound</b>. It sets the <b>time to first token</b>.</p></div>
+    <div class="tile t-blue"><h4>Decode: write the answer</h4><p>One token at a time. Each step reads every weight and the whole KV cache for very little maths, so it is <b>memory-bandwidth-bound</b>. It sets the <b>time per output token</b>.</p></div>
+  </div>
+  <figure class="eq" aria-label="Latency equals time to first token plus number of output tokens minus one times time per output token">
+    <math display="block"><mrow><mtext>Latency</mtext><mo>≈</mo><mtext class="cgr">TTFT</mtext><mo>+</mo><mo>(</mo><mi class="cg">n</mi><mo>−</mo><mn>1</mn><mo>)</mo><mo>×</mo><mtext class="cb">TPOT</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-gr"></i><b>TTFT</b> time to first token (prefill)</span><span><i class="bg-g"></i><b>n</b> output tokens</span><span><i class="bg-b"></i><b>TPOT</b> time per output token (decode)</span></figcaption>
+  </figure>
+
+  <h2>Why decode is limited by bandwidth</h2>
+  <p>To produce one token for one user, the GPU must stream every weight from HBM. So the fastest possible decode speed is set by memory bandwidth, not FLOPS.</p>
+  <figure class="eq" aria-label="Tokens per second per user is at most memory bandwidth divided by bytes read per token">
+    <math display="block"><mrow><mfrac><mtext>tokens</mtext><mtext>second</mtext></mfrac><mo>≤</mo><mfrac><mtext class="cb">memory bandwidth</mtext><mtext class="co">bytes read per token</mtext></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-b"></i>e.g. 3.35 TB/s on an H100</span><span><i class="bg-o"></i>all weights + this user's KV cache</span></figcaption>
+  </figure>
+  <Widget title="Decode speed estimator" tag="Interactive" id="w-dec">
+    <div class="ctl">
+      <div><label for="dN">Parameters <output id="dNo"></output></label><input type="range" id="dN" min="0" max="100" value="45"></div>
+      <div><label>Weight format</label><div class="seg" id="dP"><button aria-pressed="true" data-v="2">bfloat16</button><button aria-pressed="false" data-v="1">int8</button><button aria-pressed="false" data-v="0.5">int4</button></div></div>
+      <div><label for="dG">GPU</label><select id="dG"><option value="320">T4 (320 GB/s)</option><option value="2039">A100 80GB (2.0 TB/s)</option><option value="3350" selected>H100 (3.35 TB/s)</option></select></div>
+      <div><label for="dB">Users batched together <output id="dBo"></output></label><input type="range" id="dB" min="0" max="7" value="0"></div>
+    </div>
+    <div class="readout"><div><small>Weights to read per step</small><strong id="dW"></strong></div><div><small>Best case per user</small><strong id="dU"></strong></div><div><small>Best case total throughput</small><strong id="dT"></strong></div></div>
+    <p class="hint">Batching reuses each weight read for many users, so throughput rises almost for free until compute or KV cache memory runs out. Quantizing weights cuts the bytes per step, which speeds decode directly. These are upper bounds that ignore the KV cache and overheads.</p>
+  </Widget>
+
+  <h2>The KV cache</h2>
+  <p>When generating token 500, the model needs the keys and values of the 499 tokens before it. Recomputing them every step would be wasteful, so they are stored in the <b>KV cache</b>. It speeds decode up, but it eats memory, and it grows with every token and every user.</p>
+  <figure class="eq" aria-label="KV cache size equals 2 times L times H k v times d head times S times B times bytes">
+    <math display="block"><mrow><mtext>KV cache</mtext><mo>=</mo><mn class="cv">2</mn><mo>×</mo><mi class="cg">L</mi><mo>×</mo><msub><mi class="ct">H</mi><mtext class="ct">kv</mtext></msub><mo>×</mo><msub><mi class="co">d</mi><mtext class="co">head</mtext></msub><mo>×</mo><mi class="cb">S</mi><mo>×</mo><mi class="cr">B</mi><mo>×</mo><mtext>bytes</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>2</b> one K and one V</span><span><i class="bg-g"></i><b>L</b> layers</span><span><i class="bg-t"></i><b>H<sub>kv</sub></b> key/value heads</span><span><i class="bg-o"></i><b>d<sub>head</sub></b> head size</span><span><i class="bg-b"></i><b>S</b> tokens so far</span><span><i class="bg-r"></i><b>B</b> users in the batch</span></figcaption>
+  </figure>
+  <Widget title="KV cache calculator" tag="Interactive" id="w-kv">
+    <div class="ctl">
+      <div><label>Model</label><div class="seg" id="kM"><button aria-pressed="true" data-v="mha">Llama 2 7B (32 KV heads)</button><button aria-pressed="false" data-v="gqa">Llama 3 8B (8 KV heads, GQA)</button></div></div>
+      <div><label for="kS">Tokens per conversation <output id="kSo"></output></label><input type="range" id="kS" min="9" max="17" value="12"></div>
+      <div><label for="kB">Concurrent users <output id="kBo"></output></label><input type="range" id="kB" min="0" max="8" value="5"></div>
+    </div>
+    <div class="readout"><div><small>KV cache per token</small><strong id="kTok"></strong></div><div><small>Per conversation</small><strong id="kSeq"></strong></div><div><small>All users</small><strong id="kAll"></strong></div></div>
+    <div class="verdict" id="kV"></div>
+  </Widget>
+  <p><b>Grouped-query attention (GQA)</b> lets several query heads share one key/value head, so the cache shrinks. Llama 3 8B uses 8 KV heads instead of 32: a 4× smaller cache for almost the same quality.</p>
+
+  <h2>Batching: keep the GPU full</h2>
+  <div class="grid2">
+    <div class="tile t-pink"><h4>Static batching</h4><p>The whole batch waits until its longest answer finishes. Short requests leave empty slots, wasting the GPU.</p></div>
+    <div class="tile t-sage"><h4>Continuous batching</h4><p>Finished requests leave and new ones join at every decode step, so slots stay full. Used by engines like vLLM, SGLang and TensorRT-LLM.</p></div>
+  </div>
+  <p style="margin-top:14px"><b>PagedAttention</b> (vLLM) stores the KV cache in small fixed-size blocks, like pages in an operating system. Memory isn't reserved for the longest possible answer up front, so many more users fit on one GPU.</p>
+
+  <h2>Speculative decoding</h2>
+  <div class="flow"><div class="node" style="background:var(--lav);color:var(--lav-ink)">Small draft model guesses 4 tokens</div><span class="arr">→</span><div class="node" style="background:var(--blue-soft);color:var(--blue-ink)">Big model checks all 4 in one pass</div><span class="arr">→</span><div class="node" style="background:var(--sage);color:var(--sage-ink)">Keep the guesses it agrees with</div></div>
+  <p>Checking several tokens at once costs about the same as generating one, because decode is memory-bound. When the draft is right, you get several tokens for the price of one step, and the output follows exactly the same distribution as the big model alone.</p>
+
+  <h2>What inference engineers optimize</h2>
+  <div class="grid4">
+    <div class="tile t-blue"><h4>Latency</h4><p>TTFT and time per token for each user.</p></div>
+    <div class="tile t-sage"><h4>Throughput</h4><p>Tokens per second across all users.</p></div>
+    <div class="tile t-peach"><h4>Cost</h4><p>Price per million tokens.</p></div>
+    <div class="tile t-lav"><h4>Memory</h4><p>Weights plus the KV cache for every user.</p></div>
+  </div>
+  <div class="take">Bigger batches raise throughput but make each user wait longer. Inference engineering is choosing the right point on that trade-off, then using quantization, KV cache tricks, batching and speculation to move the whole curve.</div>
+  <Ben img="ben_idea" alt="Ben with an idea"><p>It all connects! Decode is <b>memory-bandwidth-bound</b>, so anything that moves fewer bytes per token (quantization, GQA, batching) makes it faster. Same lesson as FlashAttention: <b>move less data</b>.</p></Ben>
+</ModuleLayout>
+
+<script>
+import { $, fmtBytes, fmtNum, logScale, seg } from '../../scripts/lib';
+
+/* ---------- decode speed estimator ---------- */
+const dP = seg('dP', decCalc);
+function decCalc() {
+  const N = logScale(+$('#dN').value, 1e9, 4e11); const b = +dP(); const bw = +$('#dG').value * 1e9; const B = Math.pow(2, +$('#dB').value);
+  $('#dNo').textContent = fmtNum(N); $('#dBo').textContent = B; const bytes = N * b; const tps = bw / bytes; $('#dW').textContent = fmtBytes(bytes); $('#dU').textContent = tps.toFixed(tps < 10 ? 1 : 0) + ' tok/s'; $('#dT').textContent = Math.round(tps * B).toLocaleString() + ' tok/s';
+}
+['dN', 'dG', 'dB'].forEach(i => $('#' + i).addEventListener('input', decCalc)); decCalc();
+
+/* ---------- KV cache calculator ---------- */
+const kM = seg('kM', kvCalc);
+function kvCalc() {
+  const kv = kM() === 'mha' ? 32 : 8; const S = Math.pow(2, +$('#kS').value), B = Math.pow(2, +$('#kB').value); $('#kSo').textContent = S.toLocaleString(); $('#kBo').textContent = B;
+  const per = 2 * 32 * kv * 128 * 2; $('#kTok').textContent = fmtBytes(per); $('#kSeq').textContent = fmtBytes(per * S); const all = per * S * B; $('#kAll').textContent = fmtBytes(all);
+  const free = 80e9 - 16e9; const v = $('#kV');
+  if (all <= free) { v.className = 'verdict ok'; v.textContent = 'Fits next to the ~16 GB of bfloat16 weights on one 80 GB GPU.' }
+  else { v.className = 'verdict bad'; v.textContent = 'Too big: the KV cache needs ' + fmtBytes(all) + ' but only about ' + fmtBytes(free) + ' is left after the weights on an 80 GB GPU.' }
+}
+['kS', 'kB'].forEach(i => $('#' + i).addEventListener('input', kvCalc)); kvCalc();
+</script>

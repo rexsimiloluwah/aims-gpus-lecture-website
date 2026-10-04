@@ -1,0 +1,107 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import Icon from '../../components/Icon.astro';
+
+const bottlenecks = ['Compute-bound', 'Memory-bound', 'Memory-bandwidth-bound', 'Communication-bound'];
+---
+<ModuleLayout
+  id="m3"
+  heading="What is limiting my GPU?"
+  lede="Before optimizing anything, find the bottleneck. A GPU is usually held back by one of four things."
+>
+  <div class="grid4">
+    <div class="tile t-sage"><div class="ic"><Icon name="chip" /></div><h4>Compute-bound</h4><p>The cores are busy doing maths.</p></div>
+    <div class="tile t-lav"><div class="ic"><Icon name="database" /></div><h4>Memory-bound</h4><p>The model or data doesn't fit in VRAM.</p></div>
+    <div class="tile t-blue"><div class="ic"><Icon name="arrows" /></div><h4>Memory-bandwidth-bound</h4><p>Data can't reach the cores fast enough.</p></div>
+    <div class="tile t-peach"><div class="ic"><Icon name="network" /></div><h4>Communication-bound</h4><p>GPUs wait on data from each other.</p></div>
+  </div>
+
+  <Widget title="Think about Attention" tag="Quick check">
+    <p class="q-text" style="font-size:18px">What kind of bottleneck does Attention usually have?</p>
+    <div class="opts" id="attnQ">
+      {bottlenecks.map((o, i) => <button class="opt" data-i={i}><span class="L">{"ABCD"[i]}</span>{o}</button>)}
+    </div>
+    <div id="attnOut" class="explain" hidden></div>
+  </Widget>
+
+  <h2>A GPU has two kinds of memory</h2>
+  <div class="mem-diagram">
+    <div class="chip"><span class="lab">The GPU chip</span>
+      <div class="tile t-sage" style="text-align:center"><h4>Compute cores</h4><p>Do the maths</p></div>
+      <div class="tile t-lav" style="text-align:center"><h4>SRAM</h4><p>Tiny, very fast, on the chip</p></div>
+    </div>
+    <div class="muted" style="text-align:center;font-weight:600">slow trip<br>⇄</div>
+    <div class="tile t-blue" style="text-align:center;padding:26px 18px"><h4>HBM (VRAM)</h4><p>Huge, but much slower to reach</p></div>
+  </div>
+  <p style="margin-top:16px">On an H100, on-chip SRAM is measured in tens of megabytes, while HBM holds 80 GB and moves about 3.35 TB per second. Every trip to HBM costs time.</p>
+
+  <h2>Attention builds a big table</h2>
+  <figure class="eq" aria-label="Attention of Q K V equals softmax of Q K transpose over square root of d k, times V">
+    <math display="block"><mrow><mtext>Attention</mtext><mo>(</mo><mi class="cg">Q</mi><mo>,</mo><mi class="ct">K</mi><mo>,</mo><mi class="co">V</mi><mo>)</mo><mo>=</mo><mtext>softmax</mtext><mrow><mo>(</mo><mfrac><mrow><mi class="cg">Q</mi><msup><mi class="ct">K</mi><mi class="ct">T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo></mrow><mi class="co">V</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>Q</b> what each token is looking for</span><span><i class="bg-t"></i><b>K</b> what each token offers</span><span><i class="bg-o"></i><b>V</b> the information passed on</span><span><i class="bg-v"></i><b>QKᵀ</b> an n × n table of scores</span></figcaption>
+  </figure>
+
+  <Widget title="Watch the table grow" tag="Interactive" id="w-attn">
+    <div class="ctl"><div><label for="aN">Sequence length (tokens) <output id="aNo"></output></label><input type="range" id="aN" min="7" max="15" value="10"></div></div>
+    <div class="grid2" style="align-items:center">
+      <div class="attn-grid" id="aGrid" aria-hidden="true"></div>
+      <div class="readout" style="grid-template-columns:1fr"><div><small>Scores per head, per layer</small><strong id="aCells"></strong></div><div><small>Memory per head (bfloat16)</small><strong id="aMem"></strong></div><div><small>Across 32 heads and 32 layers</small><strong id="aAll"></strong></div></div>
+    </div>
+    <p class="hint">Double the sequence length and the table gets four times bigger: attention cost grows with n².</p>
+  </Widget>
+
+  <h2>Easy maths, huge data: arithmetic intensity</h2>
+  <figure class="eq" aria-label="Arithmetic intensity equals FLOPs divided by bytes moved">
+    <math display="block"><mrow><mtext>Arithmetic intensity</mtext><mo>=</mo><mfrac><mtext class="cgr">FLOPs</mtext><mtext class="cb">bytes moved</mtext></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-gr"></i>useful maths</span><span><i class="bg-b"></i>data fetched from HBM</span></figcaption>
+  </figure>
+  <p>An H100 can do about 300 FLOPs in the time it moves one byte from HBM. Operations with far fewer FLOPs per byte, like softmax over the attention table, leave the cores waiting. That is <b>memory-bandwidth-bound</b>.</p>
+
+  <h2>FlashAttention: move less data</h2>
+  <Widget title="Standard attention vs FlashAttention" tag="Animation" id="w-flash">
+    <div class="row" style="margin-bottom:14px"><div class="seg" id="fMode"><button aria-pressed="true" data-v="std">Standard</button><button aria-pressed="false" data-v="flash">FlashAttention</button></div><button class="btn ghost" id="fPlay">Play</button></div>
+    <div class="grid2" style="align-items:center">
+      <div class="attn-grid" id="fGrid" aria-hidden="true" style="grid-template-columns:repeat(8,1fr)"></div>
+      <div>
+        <div class="readout" style="grid-template-columns:1fr"><div><small>Score values written to HBM</small><strong id="fW">0</strong></div><div><small>Score values read back from HBM</small><strong id="fR">0</strong></div></div>
+        <p class="hint" id="fNote">Standard attention writes the whole score table to HBM, then reads it back for softmax and again to multiply by V.</p>
+      </div>
+    </div>
+  </Widget>
+  <div class="take">FlashAttention computes exact attention in small tiles that fit in SRAM. The full table never travels to HBM. Same maths, far less data movement.</div>
+</ModuleLayout>
+
+<script>
+import { $, answerOpts, fmtBytes, fmtNum, reduce, seg } from '../../scripts/lib';
+
+/* ---------- attention question ---------- */
+answerOpts($('#attnQ'), 2, () => {
+  const o = $('#attnOut'); o.hidden = false;
+  o.innerHTML = "<b>💡 C: memory-bandwidth-bound.</b>Attention builds a large table of scores that doesn't fit in the GPU's fast on-chip memory, so it is written to and read from slower HBM several times. The maths on that table is light, so the cores mostly wait for data. Keep reading to see why.";
+});
+
+/* ---------- attention table grows with n² ---------- */
+function attnCalc() {
+  const n = Math.pow(2, +$('#aN').value); $('#aNo').textContent = n.toLocaleString(); const cells = n * n; $('#aCells').textContent = fmtNum(cells); $('#aMem').textContent = fmtBytes(cells * 2); $('#aAll').textContent = fmtBytes(cells * 2 * 32 * 32);
+  const k = Math.min(32, Math.max(4, Math.round(4 * Math.pow(2, (+$('#aN').value - 7) / 2.6)))); const g = $('#aGrid'); g.style.gridTemplateColumns = `repeat(${k},1fr)`; g.innerHTML = '<i></i>'.repeat(k * k);
+}
+$('#aN').addEventListener('input', attnCalc); attnCalc();
+
+/* ---------- standard attention vs FlashAttention ---------- */
+const fMode = seg('fMode', () => resetFlash()); const fGrid = $('#fGrid'); fGrid.innerHTML = '<i></i>'.repeat(64); let fTimer: ReturnType<typeof setInterval> | undefined;
+function resetFlash() {
+  clearInterval(fTimer); fGrid.querySelectorAll('i').forEach((c: Element) => c.className = ''); $('#fW').textContent = '0'; $('#fR').textContent = '0';
+  $('#fNote').textContent = fMode() === 'std' ? 'Standard attention writes the whole score table to HBM, then reads it back for softmax and again to multiply by V.' : 'FlashAttention loads small tiles of Q, K and V into SRAM, finishes the softmax and the multiply there, and only writes the final output. The score table never reaches HBM.';
+}
+$('#fPlay').addEventListener('click', () => {
+  resetFlash(); const cells: HTMLElement[] = [...fGrid.querySelectorAll('i')]; let step = 0; const flash = fMode() === 'flash';
+  if (flash) {
+    const tiles: [number, number][] = []; for (let bi = 0; bi < 4; bi++) for (let bj = 0; bj < 4; bj++) tiles.push([bi, bj]);
+    fTimer = setInterval(() => { cells.forEach(c => c.classList.remove('hot')); if (step >= tiles.length) { clearInterval(fTimer); return } const [bi, bj] = tiles[step]; for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) { const c = cells[(bi * 2 + a) * 8 + bj * 2 + b]; c.classList.add('hot', 'done') } step++ }, reduce ? 60 : 380);
+  } else {
+    let w = 0, r = 0; fTimer = setInterval(() => { if (step < 64) { cells[step].classList.add('hot'); w++; $('#fW').textContent = w } else if (step < 192) { const idx = (step - 64) % 64; cells.forEach(c => c.classList.remove('hot')); cells[idx].classList.add('hot'); r++; $('#fR').textContent = r } else { cells.forEach(c => { c.classList.remove('hot'); c.classList.add('done') }); clearInterval(fTimer) } step++ }, reduce ? 5 : 28);
+  }
+});
+resetFlash();
+</script>

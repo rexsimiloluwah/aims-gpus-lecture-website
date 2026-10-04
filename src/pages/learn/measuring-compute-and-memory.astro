@@ -1,0 +1,154 @@
+---
+import ModuleLayout from '../../layouts/ModuleLayout.astro';
+import Widget from '../../components/Widget.astro';
+import Ben from '../../components/Ben.astro';
+import Icon from '../../components/Icon.astro';
+import { url } from '../../lib/url';
+---
+<ModuleLayout
+  id="m2"
+  heading="Measuring compute and memory"
+  lede="Before you train or run a model, two questions decide which GPU you need: how much compute does it take, and how much memory does it need?"
+>
+  <h2>Why bigger AI keeps getting better</h2>
+  <div class="grid2" style="align-items:center">
+    <div>
+      <p>Kaplan et al. (2020) found that as we scale <b>model size</b>, <b>data</b> and <b>compute</b>, a language model's loss falls in a smooth, predictable way, across more than seven orders of magnitude.</p>
+      <p>That predictability is why labs keep building bigger models. It also means every step up needs more GPUs, more memory and more money.</p>
+    </div>
+    <figure class="card" style="padding:12px"><img src={url('assets/img/kaplan.webp')} alt="First page of the paper Scaling Laws for Neural Language Models by Kaplan and colleagues, 2020" loading="lazy" style="border-radius:8px;border:1px solid var(--line)"><figcaption class="figcap">Kaplan et al., 2020, Scaling Laws for Neural Language Models</figcaption></figure>
+  </div>
+  <div class="take">As AI scales, the cost of intelligence scales with it.</div>
+
+  <h2>Why measure compute and memory?</h2>
+  <p>Before you train or run a model, you need answers to two questions. They decide which GPU you rent, how many you need, how long you wait and how much you pay.</p>
+  <div class="grid2">
+    <div class="tile t-blue"><div class="ic"><Icon name="chip" /></div><h4>How much compute does my model need?</h4><p>Tells you how long training takes and what it costs. Get it wrong and a "one-week" run takes three months.</p></div>
+    <div class="tile t-lav"><div class="ic"><Icon name="database" /></div><h4>How much memory does my model need?</h4><p>Tells you whether the model fits on the GPU at all. Get it wrong and you hit <span class="mono">CUDA out of memory</span> before training even starts.</p></div>
+  </div>
+
+  <h2>Measuring Compute</h2>
+  <p>Compute is the actual mathematical work a model does. We measure it by counting operations.</p>
+  <h3>FLOPs and FLOPS</h3>
+  <p>A <b>FLOP</b> is one floating-point operation, like one multiply or one add. Multiplying an m × k matrix by a k × n matrix takes about <span class="mono">2 × m × k × n</span> FLOPs (one multiply and one add for each term).</p>
+  <div class="grid2">
+    <div class="tile t-blue"><h4>FLOPs (lowercase s)</h4><p>A <b>count</b>: how much work a job needs.</p></div>
+    <div class="tile t-sage"><h4>FLOPS (capital S)</h4><p>A <b>speed</b>: how much work a GPU does per second.</p></div>
+  </div>
+  <h3>Estimating training compute</h3>
+  <p>For a standard transformer, training compute has a famous shortcut:</p>
+  <figure class="eq" aria-label="Training FLOPs is approximately 6 times N times D">
+    <math display="block"><mrow><mtext>Training FLOPs</mtext><mo>≈</mo><mn class="cv">6</mn><mo>×</mo><mi class="cg">N</mi><mo>×</mo><mi class="ct">D</mi></mrow></math>
+    <figcaption class="legend"><span><i class="bg-v"></i><b>6</b> 2 FLOPs forward + 4 backward, per parameter per token</span><span><i class="bg-g"></i><b>N</b> parameters</span><span><i class="bg-t"></i><b>D</b> training tokens</span></figcaption>
+  </figure>
+  <figure class="eq" aria-label="Training time equals FLOPs divided by GPU FLOPS times utilization times number of GPUs">
+    <math display="block"><mrow><mtext>Time</mtext><mo>=</mo><mfrac><mtext>FLOPs</mtext><mrow><mtext class="co">FLOPS</mtext><mo>×</mo><mi class="cgr">u</mi><mo>×</mo><mi class="cb">G</mi></mrow></mfrac></mrow></math>
+    <figcaption class="legend"><span><i class="bg-o"></i><b>FLOPS</b> GPU peak speed</span><span><i class="bg-gr"></i><b>u</b> utilization, often 30 to 50%</span><span><i class="bg-b"></i><b>G</b> number of GPUs</span></figcaption>
+  </figure>
+  <Widget title="Training cost calculator" tag="Interactive" id="w-train">
+    <div class="ctl">
+      <div><label for="tN">Parameters (N) <output id="tNo"></output></label><input type="range" id="tN" min="0" max="100" value="40"></div>
+      <div><label for="tD">Training tokens (D) <output id="tDo"></output></label><input type="range" id="tD" min="0" max="100" value="45"></div>
+      <div><label for="tG">GPU</label><select id="tG"><option value="65|0.35">NVIDIA T4 (65 TFLOPS, $0.35/h)</option><option value="312|2.5" >NVIDIA A100 (312 TFLOPS, $2.50/h)</option><option value="989|4" selected>NVIDIA H100 (989 TFLOPS, $4/h)</option></select></div>
+      <div><label for="tU">Utilization <output id="tUo"></output></label><input type="range" id="tU" min="10" max="100" value="40"></div>
+      <div><label for="tC">Number of GPUs <output id="tCo"></output></label><input type="range" id="tC" min="0" max="10" value="3"></div>
+    </div>
+    <div class="readout"><div><small>Total compute</small><strong id="tF"></strong></div><div><small>Training time</small><strong id="tT"></strong></div><div><small>Cost</small><strong id="tCost"></strong></div><div><small>GPU-hours</small><strong id="tGH"></strong></div></div>
+    <p class="hint">Prices are rough cloud rates and change often. Real runs rarely exceed about 50% utilization.</p>
+  </Widget>
+
+  <h2>Measuring Memory</h2>
+  <p>Memory decides whether a model can run on a GPU at all. If everything it needs doesn't fit in VRAM, the job crashes with <span class="mono">CUDA out of memory</span>, however fast the GPU is. So before choosing a GPU, we add up what has to be stored.</p>
+  <h3>How numbers are stored</h3>
+  <p>Every number in a model is stored with a fixed number of bits. More bits means more precision, and more memory.</p>
+  <div class="tbl-wrap"><table class="data"><thead><tr><th>Format</th><th>Bytes per number</th><th>Used for</th></tr></thead><tbody>
+    <tr><td>float32</td><td class="mono">4</td><td>Classic training, optimizer states</td></tr>
+    <tr><td>bfloat16</td><td class="mono">2</td><td>Modern training and inference: same range as float32, less precision</td></tr>
+    <tr><td>int8</td><td class="mono">1</td><td>Quantized inference</td></tr>
+    <tr><td>int4</td><td class="mono">0.5</td><td>Aggressive quantized inference</td></tr>
+  </tbody></table></div>
+  <figure class="eq" aria-label="Parameter memory equals N times bytes per parameter">
+    <math display="block"><mrow><mtext>Parameter memory</mtext><mo>=</mo><mi class="cg">N</mi><mo>×</mo><mtext class="co">bytes per parameter</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i><b>N</b> parameters</span><span><i class="bg-o"></i><b>bytes</b> 4, 2, 1 or 0.5</span></figcaption>
+  </figure>
+  <p>A 7B model in bfloat16 needs 7 × 10⁹ × 2 bytes = 14 GB just for its weights. But weights are only part of the story.</p>
+
+  <h3>What fills GPU memory during training</h3>
+  <p>To learn, the model must remember how it got its answer and how to improve it, so training stores four things:</p>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Weights (parameters)</h4><p>The model itself: every number it has learned so far.</p></div>
+    <div class="tile t-peach"><h4>Gradients</h4><p>One per parameter: how each weight should change to reduce the loss.</p></div>
+    <div class="tile t-pink"><h4>Optimizer states</h4><p>Adam keeps two per parameter: momentum (a running average of gradients) and variance (a running average of squared gradients).</p></div>
+    <div class="tile t-blue"><h4>Activations</h4><p>The outputs of every layer, saved during the forward pass so the backward pass can compute gradients.</p></div>
+  </div>
+  <figure class="eq" aria-label="Training memory is parameters plus gradients plus optimizer states plus activations">
+    <math display="block"><mrow><mtext>Training memory</mtext><mo>≈</mo><mtext class="cg">weights</mtext><mo>+</mo><mtext class="co">gradients</mtext><mo>+</mo><mtext class="cr">optimizer states</mtext><mo>+</mo><mtext class="ct">activations</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i>N × bytes</span><span><i class="bg-o"></i>one per parameter</span><span><i class="bg-r"></i>two per parameter with Adam</span><span><i class="bg-t"></i>grows with batch size</span></figcaption>
+  </figure>
+
+  <h3>What fills GPU memory during inference</h3>
+  <p>When we only run the model, nothing is learned, so gradients and optimizer states disappear. Three things remain:</p>
+  <div class="grid3">
+    <div class="tile t-sage"><h4>Weights</h4><p>Still the whole model, usually the biggest item.</p></div>
+    <div class="tile t-blue"><h4>Temporary activations</h4><p>Only the current layer's outputs, thrown away as soon as the next layer has used them.</p></div>
+    <div class="tile t-lav"><h4>KV cache</h4><p>Keys and values of earlier tokens, kept so they aren't recomputed for every new token (Module 6).</p></div>
+  </div>
+  <figure class="eq" aria-label="Inference memory is weights plus KV cache plus temporary activations">
+    <math display="block"><mrow><mtext>Inference memory</mtext><mo>≈</mo><mtext class="cg">weights</mtext><mo>+</mo><mtext class="cv">KV cache</mtext><mo>+</mo><mtext class="ct">temporary activations</mtext></mrow></math>
+    <figcaption class="legend"><span><i class="bg-g"></i>N × bytes</span><span><i class="bg-v"></i>grows with batch size and conversation length</span><span><i class="bg-t"></i>small and short-lived</span></figcaption>
+  </figure>
+
+  <h3>The role of batch size</h3>
+  <p>The <b>batch size</b> is how many examples (or users) the GPU processes at once. It splits memory into two kinds:</p>
+  <div class="grid2">
+    <div class="tile t-sage"><h4>Fixed by the model</h4><p>Weights, gradients and optimizer states depend only on the number of parameters. Changing the batch size doesn't change them.</p></div>
+    <div class="tile t-peach"><h4>Grows with the batch</h4><p>Activations in training, and the KV cache in inference, are stored for every example. Double the batch size and they double. Longer sequences grow them too.</p></div>
+  </div>
+  <p style="margin-top:14px">That's why the classic fix for an out-of-memory error is to <b>lower the batch size</b>: it shrinks the part that grows, without touching the model.</p>
+
+  <Widget title="Will it fit? Pack Ben's backpack" tag="Interactive" id="w-mem">
+    <div class="ctl">
+      <div><label for="mN">Parameters <output id="mNo"></output></label><input type="range" id="mN" min="0" max="100" value="45"></div>
+      <div><label>Mode</label><div class="seg" id="mMode"><button aria-pressed="true" data-v="train">Training (Adam)</button><button aria-pressed="false" data-v="infer">Inference</button></div></div>
+      <div><label>Precision</label><div class="seg" id="mP"><button aria-pressed="false" data-v="4">float32</button><button aria-pressed="true" data-v="2">bfloat16</button><button aria-pressed="false" data-v="1">int8</button><button aria-pressed="false" data-v="0.5">int4</button></div></div>
+      <div><label for="mB">Batch size <output id="mBo"></output></label><input type="range" id="mB" min="0" max="7" value="2"></div>
+      <div><label for="mS">Sequence length</label><select id="mS"><option value="512">512 tokens</option><option value="2048" selected>2,048 tokens</option><option value="8192">8,192 tokens</option></select></div>
+      <div><label for="mV">GPU memory</label><select id="mV"><option value="16">16 GB (T4)</option><option value="24">24 GB (RTX 4090)</option><option value="40">40 GB (A100 40GB)</option><option value="80" selected>80 GB (A100 or H100 80GB)</option></select></div>
+    </div>
+    <div style="margin:28px 0 8px"><div class="stack" id="mStack"></div></div>
+    <div class="readout" style="margin-top:14px" id="mParts"></div>
+    <div class="verdict" id="mVerdict"></div>
+    <p class="hint">Rule of thumb from the lecture: one gradient per parameter, and Adam keeps two optimizer states (momentum and variance) per parameter. Activations and the KV cache are estimated for a standard transformer in bfloat16.</p>
+  </Widget>
+  <Ben img="ben_fire" alt="Ben, fired up"><p>Training needs about <b>4× the weights</b> plus activations, while inference needs little more than the weights. That's why a model you can <b>run</b> on a laptop can still be impossible to <b>train</b> there.</p></Ben>
+</ModuleLayout>
+
+<script>
+import { $, fmtNum, fmtTime, logScale, money, sci, seg } from '../../scripts/lib';
+
+/* ---------- training cost calculator ---------- */
+function trainCalc() {
+  const N = logScale(+$('#tN').value, 1e8, 1e12), D = logScale(+$('#tD').value, 1e9, 2e13); const [tf, price] = $('#tG').value.split('|').map(Number); const u = +$('#tU').value / 100; const G = Math.pow(2, +$('#tC').value);
+  $('#tNo').textContent = fmtNum(N); $('#tDo').textContent = fmtNum(D); $('#tUo').textContent = Math.round(u * 100) + '%'; $('#tCo').textContent = G.toLocaleString();
+  const F = 6 * N * D, sec = F / (tf * 1e12 * u * G), h = sec / 3600; $('#tF').textContent = sci(F); $('#tT').textContent = fmtTime(h); $('#tCost').textContent = money(h * G * price); $('#tGH').textContent = fmtNum(h * G);
+}
+['tN', 'tD', 'tG', 'tU', 'tC'].forEach(i => $('#' + i).addEventListener('input', trainCalc)); trainCalc();
+
+/* ---------- will it fit? memory calculator ---------- */
+const mP = seg('mP', memCalc), mMode = seg('mMode', memCalc);
+function memCalc() {
+  const N = logScale(+$('#mN').value, 1e8, 2e11); const b = +mP(); const train = mMode() === 'train'; const B = Math.pow(2, +$('#mB').value); const S = +$('#mS').value; const V = +$('#mV').value;
+  $('#mNo').textContent = fmtNum(N); $('#mBo').textContent = B;
+  const L = Math.max(2, Math.round(Math.cbrt(N / 196608))), h = 128 * L; /* standard transformer shape: N ≈ 12 L h², h ≈ 128 L */
+  const p = N * b / 1e9; let parts: [string, number, string][];
+  if (train) { const act = 34 * S * B * h * L / 1e9; parts = [['Weights', p, '#BFE0B1'], ['Gradients', p, '#F8CFA4'], ['Optimizer states', 2 * p, '#F2B8B5'], ['Activations', act, '#B9DCE6']] }
+  else { const kv = 2 * L * h * S * B * 2 / 1e9, tmp = 4 * S * B * h * 2 / 1e9; parts = [['Weights', p, '#BFE0B1'], ['KV cache', kv, '#D7C9F4'], ['Temporary activations', tmp, '#B9DCE6']] }
+  const tot = parts.reduce((s, x) => s + x[1], 0); const scale = Math.max(tot, V) * 1.05;
+  $('#mStack').innerHTML = parts.map(([n, v, c]) => `<span style="width:${v / scale * 100}%;background:${c}" title="${n}: ${v.toFixed(1)} GB">${v / scale > 0.1 ? n : ''}</span>`).join('') + `<i class="limit" data-l="${V} GB GPU" style="left:${V / scale * 100}%"></i>`;
+  $('#mParts').innerHTML = parts.map(([n, v, c]) => `<div style="border-left:5px solid ${c}"><small>${n}</small><strong>${v < 0.1 ? v.toFixed(2) : v.toFixed(1)} GB</strong></div>`).join('') + `<div><small>Total needed</small><strong>${tot.toFixed(1)} GB</strong></div>`;
+  const vd = $('#mVerdict');
+  if (tot <= V) { vd.className = 'verdict ok'; vd.textContent = "It fits. Ben's backpack closes with " + (V - tot).toFixed(1) + ' GB to spare.' }
+  else { vd.className = 'verdict bad'; vd.textContent = "It doesn't fit: " + (tot - V).toFixed(1) + ' GB over. Try a smaller batch size, a shorter sequence, lower precision, or the tricks in Modules 4 and 5.' }
+}
+['mN', 'mB', 'mS', 'mV'].forEach(i => $('#' + i).addEventListener('input', memCalc)); memCalc();
+</script>
